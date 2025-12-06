@@ -1,0 +1,40 @@
+{
+  "name": "tactivo-server",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js",
+    "test-pts": "node scripts/test-pts-connection.js",
+    "migrate": "node scripts/run-migrations.js",
+    "test-login": "node scripts/test-login.js",
+    "test-login-http": "node scripts/test-login-direct.js",
+    "verify-password": "node scripts/verify-db-password.js",
+    "reset-password": "node scripts/reset-user-password.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "axios": "^1.13.2",
+    "bcrypt": "^5.1.1",
+    "better-sqlite3": "^12.5.0",
+    "config": "^4.1.1",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "express": "^5.2.1",
+    "jsonwebtoken": "^9.0.2",
+    "pg": "^8.16.3",
+    "pm2": "^6.0.14",
+    "sqlite3": "^5.1.7",
+    "swagger-jsdoc": "^6.2.8",
+    "swagger-ui-express": "^5.0.1",
+    "ws": "^8.18.3"
+  },
+  "devDependencies": {
+    "jest": "^30.2.0",
+    "nodemon": "^3.1.11"
+  }
+}
