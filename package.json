@@ -12,6 +12,7 @@
     "test-login-http": "node scripts/test-login-direct.js",
     "verify-password": "node scripts/verify-db-password.js",
     "reset-password": "node scripts/reset-user-password.js",
+    "get-ip": "node scripts/get-network-ip.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],

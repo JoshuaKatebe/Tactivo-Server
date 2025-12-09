@@ -60,8 +60,80 @@ router.get('/products', authenticate, async (req, res) => {
 });
 
 /**
- * GET /api/shop/products/:id
- * Get product by ID
+ * @swagger
+ * /api/shop/products/{id}:
+ *   get:
+ *     summary: Get product by ID
+ *     tags: [Shop]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Product details
+ *       404:
+ *         description: Product not found
+ *   put:
+ *     summary: Update product
+ *     tags: [Shop]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               sku:
+ *                 type: string
+ *               name:
+ *                 type: string
+ *               price:
+ *                 type: number
+ *               cost:
+ *                 type: number
+ *               unit:
+ *                 type: string
+ *               stock_qty:
+ *                 type: number
+ *               active:
+ *                 type: boolean
+ *     responses:
+ *       200:
+ *         description: Product updated
+ *       404:
+ *         description: Product not found
+ *   delete:
+ *     summary: Delete product
+ *     tags: [Shop]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Product deleted
+ *       404:
+ *         description: Product not found
  */
 router.get('/products/:id', authenticate, async (req, res) => {
     try {
@@ -88,8 +160,72 @@ router.get('/products/:id', authenticate, async (req, res) => {
 });
 
 /**
- * POST /api/shop/products
- * Create product
+ * @swagger
+ * /api/shop/products:
+ *   post:
+ *     summary: Create a new product
+ *     description: Add a new product to inventory with name, price, quantity, and other details
+ *     tags: [Shop]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - name
+ *               - price
+ *             properties:
+ *               station_id:
+ *                 type: string
+ *                 format: uuid
+ *                 description: Station ID (optional, can be null for global products)
+ *               sku:
+ *                 type: string
+ *                 description: Stock Keeping Unit (barcode/SKU)
+ *                 example: "PROD-001"
+ *               name:
+ *                 type: string
+ *                 description: Product name
+ *                 example: "Coca Cola 500ml"
+ *               price:
+ *                 type: number
+ *                 description: Selling price
+ *                 example: 2.50
+ *               cost:
+ *                 type: number
+ *                 description: Cost price (for profit calculation)
+ *                 example: 1.80
+ *               unit:
+ *                 type: string
+ *                 description: Unit of measurement
+ *                 example: "bottle"
+ *               stock_qty:
+ *                 type: number
+ *                 description: Initial stock quantity
+ *                 default: 0
+ *                 example: 100
+ *               active:
+ *                 type: boolean
+ *                 description: Whether product is active
+ *                 default: true
+ *     responses:
+ *       201:
+ *         description: Product created successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: boolean
+ *                   example: false
+ *                 data:
+ *                   $ref: '#/components/schemas/Product'
+ *       400:
+ *         description: Missing required fields (name or price)
  */
 router.post('/products', authenticate, async (req, res) => {
     try {
@@ -128,10 +264,6 @@ router.post('/products', authenticate, async (req, res) => {
     }
 });
 
-/**
- * PUT /api/shop/products/:id
- * Update product
- */
 router.put('/products/:id', authenticate, async (req, res) => {
     try {
         const product = await shopService.updateProduct(req.params.id, req.body);
@@ -156,10 +288,6 @@ router.put('/products/:id', authenticate, async (req, res) => {
     }
 });
 
-/**
- * DELETE /api/shop/products/:id
- * Delete product
- */
 router.delete('/products/:id', authenticate, async (req, res) => {
     try {
         const product = await shopService.deleteProduct(req.params.id);

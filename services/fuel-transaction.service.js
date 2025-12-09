@@ -131,6 +131,120 @@ class FuelTransactionService {
         );
         return result.rows[0] || null;
     }
+
+    /**
+     * Create fuel transaction from PTS controller data
+     * @param {Object} ptsData - PTS transaction data
+     * @param {string} employeeId - Employee who authorized the transaction
+     * @param {string} shiftId - Optional shift ID
+     * @param {string} stationId - Station ID
+     * @param {string} ptsControllerId - PTS controller ID
+     * @returns {Promise<Object>} Created transaction
+     */
+    async createFromPTS(ptsData, employeeId, shiftId, stationId, ptsControllerId) {
+        const result = await db.query(
+            `INSERT INTO fuel_transactions 
+             (station_id, pts_controller_id, pts_transaction_id, pump_number, nozzle,
+              transaction_datetime, volume, amount, price, authorized_by_employee_id, synced)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, false) RETURNING *`,
+            [
+                stationId,
+                ptsControllerId || null,
+                ptsData.Transaction || null,
+                ptsData.Pump || null,
+                ptsData.Nozzle || null,
+                new Date(),
+                ptsData.Volume || 0,
+                ptsData.Amount || 0,
+                ptsData.Price || (ptsData.Volume > 0 ? ptsData.Amount / ptsData.Volume : 0),
+                employeeId || null
+            ]
+        );
+
+        logger.info('Transaction created from PTS', {
+            transactionId: result.rows[0].id,
+            employeeId,
+            pump: ptsData.Pump
+        });
+
+        return result.rows[0];
+    }
+
+    /**
+     * Get transactions for a specific shift
+     * @param {string} shiftId - Shift ID
+     * @param {number} limit - Maximum results
+     * @returns {Promise<Array>} Transactions
+     */
+    async getByShift(shiftId, limit = 100) {
+        // Get shift details first
+        const shiftResult = await db.query(
+            'SELECT employee_id, station_id, start_time, end_time FROM employee_shifts WHERE id = $1',
+            [shiftId]
+        );
+
+        if (shiftResult.rows.length === 0) {
+            return [];
+        }
+
+        const shift = shiftResult.rows[0];
+
+        // Get transactions for that shift's employee during shift time
+        const result = await db.query(
+            `SELECT ft.*, 
+                    s.name as station_name,
+                    e.first_name || ' ' || e.last_name as authorized_by_name
+             FROM fuel_transactions ft
+             LEFT JOIN stations s ON ft.station_id = s.id
+             LEFT JOIN employees e ON ft.authorized_by_employee_id = e.id
+             WHERE ft.authorized_by_employee_id = $1
+               AND ft.station_id = $2
+               AND ft.transaction_datetime >= $3
+               AND ($4::timestamptz IS NULL OR ft.transaction_datetime <= $4)
+             ORDER BY ft.transaction_datetime DESC
+             LIMIT $5`,
+            [shift.employee_id, shift.station_id, shift.start_time, shift.end_time, limit]
+        );
+
+        return result.rows;
+    }
+
+    /**
+     * Get transactions for a specific employee
+     * @param {string} employeeId - Employee ID
+     * @param {Date} startDate - Start date filter
+     * @param {Date} endDate - End date filter
+     * @param {number} limit - Maximum results
+     * @returns {Promise<Array>} Transactions
+     */
+    async getByEmployee(employeeId, startDate, endDate, limit = 100) {
+        let query = `
+            SELECT ft.*, 
+                   s.name as station_name,
+                   e.first_name || ' ' || e.last_name as authorized_by_name
+            FROM fuel_transactions ft
+            LEFT JOIN stations s ON ft.station_id = s.id
+            LEFT JOIN employees e ON ft.authorized_by_employee_id = e.id
+            WHERE ft.authorized_by_employee_id = $1
+        `;
+        const params = [employeeId];
+        let paramIndex = 2;
+
+        if (startDate) {
+            query += ` AND ft.transaction_datetime >= $${paramIndex++}`;
+            params.push(startDate);
+        }
+        if (endDate) {
+            query += ` AND ft.transaction_datetime <= $${paramIndex++}`;
+            params.push(endDate);
+        }
+
+        query += ' ORDER BY ft.transaction_datetime DESC LIMIT $' + paramIndex;
+        params.push(limit);
+
+        const result = await db.query(query, params);
+        return result.rows;
+    }
 }
 
 module.exports = new FuelTransactionService();

@@ -162,6 +162,115 @@ class EmployeeShiftService {
         const result = await db.query(query, params);
         return result.rows[0] || null;
     }
+
+    /**
+     * Get shift with all transactions
+     */
+    async getShiftWithTransactions(shiftId) {
+        const shift = await this.getById(shiftId);
+        if (!shift) {
+            return null;
+        }
+
+        // Get all fuel transactions for this shift's employee during shift time
+        const transactions = await db.query(
+            `SELECT ft.* 
+             FROM fuel_transactions ft
+             WHERE ft.authorized_by_employee_id = $1
+               AND ft.station_id = $2
+               AND ft.transaction_datetime >= $3
+               AND ($4::timestamptz IS NULL OR ft.transaction_datetime <= $4)
+             ORDER BY ft.transaction_datetime DESC`,
+            [shift.employee_id, shift.station_id, shift.start_time, shift.end_time]
+        );
+
+        shift.transactions = transactions.rows;
+        return shift;
+    }
+
+    /**
+     * Get shift summary with calculated totals
+     */
+    async getShiftSummary(shiftId) {
+        const shift = await this.getById(shiftId);
+        if (!shift) {
+            return null;
+        }
+
+        // Calculate totals from transactions
+        const summary = await db.query(
+            `SELECT 
+                COUNT(*) as transaction_count,
+                COALESCE(SUM(volume), 0) as total_volume,
+                COALESCE(SUM(amount), 0) as total_amount,
+                COALESCE(AVG(price), 0) as average_price,
+                MIN(transaction_datetime) as first_transaction,
+                MAX(transaction_datetime) as last_transaction
+             FROM fuel_transactions
+             WHERE authorized_by_employee_id = $1
+               AND station_id = $2
+               AND transaction_datetime >= $3
+               AND ($4::timestamptz IS NULL OR transaction_datetime <= $4)`,
+            [shift.employee_id, shift.station_id, shift.start_time, shift.end_time]
+        );
+
+        return {
+            ...shift,
+            summary: summary.rows[0]
+        };
+    }
+
+    /**
+     * Get current active shift for attendant (for pump authorization)
+     */
+    async getCurrentAttendantShift(employeeId, stationId) {
+        return await this.getOpenShift(employeeId, stationId);
+    }
+
+    /**
+     * End shift with auto-calculated totals
+     */
+    async endShiftWithTotals(id, data = {}) {
+        const shift = await this.getById(id);
+        if (!shift) {
+            return null;
+        }
+
+        // Auto-calculate closing totals from transactions
+        const totals = await db.query(
+            `SELECT 
+                COUNT(*) as transaction_count,
+                COALESCE(SUM(volume), 0) as total_volume,
+                COALESCE(SUM(amount), 0) as total_amount,
+                json_agg(
+                    json_build_object(
+                        'pump', pump_number,
+                        'nozzle', nozzle,
+                        'volume', volume,
+                        'amount', amount
+                    )
+                ) as transactions_detail
+             FROM fuel_transactions
+             WHERE authorized_by_employee_id = $1
+               AND station_id = $2
+               AND transaction_datetime >= $3`,
+            [shift.employee_id, shift.station_id, shift.start_time]
+        );
+
+        const closingTotals = data.closing_totals || totals.rows[0];
+        const closingCash = data.closing_cash;
+        const cleared = data.cleared || false;
+
+        const result = await db.query(
+            `UPDATE employee_shifts 
+             SET end_time = now(), status = 'closed',
+                 closing_totals = $1, closing_cash = $2, cleared = $3, updated_at = now()
+             WHERE id = $4 RETURNING *`,
+            [closingTotals, closingCash || null, cleared, id]
+        );
+
+        return result.rows[0] || null;
+    }
 }
 
 module.exports = new EmployeeShiftService();

@@ -236,6 +236,64 @@ const options = {
                             }
                         }
                     }
+                },
+                Product: {
+                    type: 'object',
+                    properties: {
+                        id: {
+                            type: 'string',
+                            format: 'uuid'
+                        },
+                        station_id: {
+                            type: 'string',
+                            format: 'uuid',
+                            nullable: true
+                        },
+                        sku: {
+                            type: 'string',
+                            nullable: true,
+                            description: 'Stock Keeping Unit (barcode/SKU)'
+                        },
+                        name: {
+                            type: 'string',
+                            description: 'Product name'
+                        },
+                        price: {
+                            type: 'number',
+                            format: 'decimal',
+                            description: 'Selling price'
+                        },
+                        cost: {
+                            type: 'number',
+                            format: 'decimal',
+                            nullable: true,
+                            description: 'Cost price (for profit calculation)'
+                        },
+                        unit: {
+                            type: 'string',
+                            nullable: true,
+                            description: 'Unit of measurement (e.g., "bottle", "pack", "kg")'
+                        },
+                        stock_qty: {
+                            type: 'number',
+                            format: 'decimal',
+                            description: 'Current stock quantity',
+                            default: 0
+                        },
+                        active: {
+                            type: 'boolean',
+                            description: 'Whether product is active',
+                            default: true
+                        },
+                        created_at: {
+                            type: 'string',
+                            format: 'date-time'
+                        },
+                        updated_at: {
+                            type: 'string',
+                            format: 'date-time'
+                        }
+                    }
                 }
             }
         },

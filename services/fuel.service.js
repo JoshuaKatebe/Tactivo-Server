@@ -13,14 +13,19 @@ class FuelService extends EventEmitter {
         this.pollingInterval = config.pollingInterval || 1000;
         this.pollingTimer = null;
         this.isPolling = false;
-        
+
         // State storage
         this.pumpStatuses = new Map(); // pumpNumber -> status object
         this.tankStatuses = new Map(); // tankNumber -> status object
         this.lastTransactionNumbers = new Map(); // pumpNumber -> last transaction number
-        
-        // Track which pumps to poll (can be configured)
+
+        // Track which pumps/probes to poll (can be configured)
         this.pumpsToPoll = [];
+        this.probesToPoll = [];
+
+        // Track which devices are actually configured (discovered from responses)
+        this.configuredPumps = new Set();
+        this.configuredProbes = new Set();
     }
 
     /**
@@ -75,10 +80,18 @@ class FuelService extends EventEmitter {
      */
     async pollAllPumps() {
         try {
-            // If no pumps configured, try to poll first 10 pumps
-            const pumpsToCheck = this.pumpsToPoll.length > 0 
-                ? this.pumpsToPoll 
-                : Array.from({ length: 10 }, (_, i) => i + 1);
+            // Determine which pumps to check
+            let pumpsToCheck;
+            if (this.pumpsToPoll.length > 0) {
+                // Use explicitly configured pumps
+                pumpsToCheck = this.pumpsToPoll;
+            } else if (this.configuredPumps.size > 0) {
+                // Use discovered configured pumps
+                pumpsToCheck = Array.from(this.configuredPumps);
+            } else {
+                // First time: try to discover configured pumps (check first 20 pumps)
+                pumpsToCheck = Array.from({ length: 20 }, (_, i) => i + 1);
+            }
 
             // Create batch request for all pumps
             const commands = pumpsToCheck.map(pumpNumber => ({
@@ -96,7 +109,12 @@ class FuelService extends EventEmitter {
                 response.Packets.forEach((packet, index) => {
                     const pumpNumber = pumpsToCheck[index];
                     if (packet.Error !== true && packet.Data) {
+                        // Pump is configured and responding
+                        this.configuredPumps.add(pumpNumber);
                         this.updatePumpStatus(pumpNumber, packet.Data);
+                    } else if (packet.Error === true && packet.Message === 'JSONPTS_ERROR_NOT_FOUND') {
+                        // Pump is not configured - remove from configured set if it was there
+                        this.configuredPumps.delete(pumpNumber);
                     }
                 });
             }
@@ -123,7 +141,7 @@ class FuelService extends EventEmitter {
             const lastTransaction = this.lastTransactionNumbers.get(pumpNumber);
             if (lastTransaction !== statusData.Transaction) {
                 this.lastTransactionNumbers.set(pumpNumber, statusData.Transaction);
-                
+
                 // If transaction completed, fetch transaction details
                 if (statusData.Status === 'EndOfTransaction') {
                     this.fetchTransactionDetails(pumpNumber, statusData.Transaction);
@@ -177,12 +195,64 @@ class FuelService extends EventEmitter {
     }
 
     /**
+     * Get pump transaction info directly
+     * Used by API to close transactions
+     */
+    async getPumpTransactionInfo(pumpNumber) {
+        try {
+            const response = await this.ptsClient.createComplexRequest([{
+                function: this.ptsClient.PumpGetTransactionInformation.bind(this.ptsClient),
+                arguments: [pumpNumber]
+            }]);
+
+            if (response.Packets && response.Packets[0] && response.Packets[0].Data) {
+                return response.Packets[0].Data;
+            }
+
+            return null;
+        } catch (error) {
+            logger.error('Error getting pump transaction info', { pump: pumpNumber, error: error.message });
+            throw error;
+        }
+    }
+
+    /**
      * Poll all tanks/probes
      */
     async pollAllTanks() {
         try {
-            // Poll first 10 probes (adjust based on configuration)
-            const probesToCheck = Array.from({ length: 10 }, (_, i) => i + 1);
+            // Determine which probes to check
+            let probesToCheck;
+            if (this.probesToPoll.length > 0) {
+                // Use explicitly configured probes
+                probesToCheck = this.probesToPoll;
+            } else if (this.configuredProbes.size > 0) {
+                // Use discovered configured probes
+                probesToCheck = Array.from(this.configuredProbes);
+            } else {
+                // First time: try to discover configured probes
+                // Start by checking probes 1-10, but also try to get probe configuration
+                probesToCheck = Array.from({ length: 10 }, (_, i) => i + 1);
+
+                // Try to get probe configuration to find which probes are actually configured
+                try {
+                    const configResponse = await this.ptsClient.createComplexRequest([{
+                        function: this.ptsClient.GetProbesConfiguration.bind(this.ptsClient),
+                        arguments: []
+                    }]);
+
+                    if (configResponse.Packets && configResponse.Packets[0] &&
+                        configResponse.Packets[0].Data && configResponse.Packets[0].Data.Probes) {
+                        const configuredProbeIds = configResponse.Packets[0].Data.Probes.map(p => p.Id);
+                        if (configuredProbeIds.length > 0) {
+                            logger.debug('Found configured probes from configuration', { probeIds: configuredProbeIds });
+                            probesToCheck = configuredProbeIds;
+                        }
+                    }
+                } catch (configError) {
+                    logger.debug('Could not get probe configuration, using discovery method', { error: configError.message });
+                }
+            }
 
             const commands = probesToCheck.map(probeNumber => ({
                 function: this.ptsClient.ProbeGetMeasurements.bind(this.ptsClient),
@@ -195,13 +265,76 @@ class FuelService extends EventEmitter {
 
             const response = await this.ptsClient.createComplexRequest(commands);
 
+            logger.debug('Tank polling response', {
+                hasPackets: !!response.Packets,
+                packetCount: response.Packets ? response.Packets.length : 0,
+                responseKeys: Object.keys(response)
+            });
+
             if (response.Packets) {
                 response.Packets.forEach((packet, index) => {
-                    const probeNumber = probesToCheck[index];
+                    // Get probe number from request (fallback) or from response data
+                    let probeNumber = probesToCheck[index];
+
+                    // If response has Data with Probe field, use that (more reliable)
+                    if (packet.Data && packet.Data.Probe !== undefined) {
+                        probeNumber = packet.Data.Probe;
+                    }
+
+                    logger.debug('Tank probe response', {
+                        probeNumber,
+                        packetId: packet.Id,
+                        packetType: packet.Type,
+                        hasError: packet.Error === true,
+                        errorMessage: packet.Message,
+                        hasData: !!packet.Data,
+                        dataKeys: packet.Data ? Object.keys(packet.Data) : [],
+                        responseProbeNumber: packet.Data?.Probe
+                    });
+
                     if (packet.Error !== true && packet.Data) {
-                        this.updateTankStatus(probeNumber, packet.Data);
+                        // Verify this is a ProbeMeasurements response
+                        if (packet.Type === 'ProbeMeasurements' || packet.Data.Probe !== undefined) {
+                            // Probe is configured and responding
+                            this.configuredProbes.add(probeNumber);
+                            logger.info('Received tank measurements', {
+                                probeNumber,
+                                fuelGrade: packet.Data.FuelGradeName || packet.Data.FuelGradeId,
+                                productVolume: packet.Data.ProductVolume,
+                                productHeight: packet.Data.ProductHeight,
+                                temperature: packet.Data.Temperature,
+                                tankFillingPercentage: packet.Data.TankFillingPercentage
+                            });
+                            this.updateTankStatus(probeNumber, packet.Data);
+                        } else {
+                            logger.warn('Unexpected packet type for tank measurements', {
+                                probeNumber,
+                                packetType: packet.Type,
+                                hasData: !!packet.Data
+                            });
+                        }
+                    } else if (packet.Error === true && packet.Message === 'JSONPTS_ERROR_NOT_FOUND') {
+                        // Probe is not configured - remove from configured set if it was there
+                        this.configuredProbes.delete(probeNumber);
+                        logger.debug('Probe not configured', { probeNumber });
+                    } else if (packet.Error !== true && !packet.Data) {
+                        // Response received but no data - might be different format
+                        logger.warn('Probe response has no data', {
+                            probeNumber,
+                            packetType: packet.Type,
+                            packet: JSON.stringify(packet)
+                        });
+                    } else if (packet.Error === true) {
+                        // Other error
+                        logger.warn('Probe response error', {
+                            probeNumber,
+                            errorMessage: packet.Message,
+                            packetType: packet.Type
+                        });
                     }
                 });
+            } else {
+                logger.warn('No Packets in tank response', { response: JSON.stringify(response) });
             }
         } catch (error) {
             logger.error('Error polling tanks', error);
@@ -223,14 +356,20 @@ class FuelService extends EventEmitter {
 
     /**
      * Authorize a pump for fueling
+     * @param {number} pumpNumber - Pump number
+     * @param {number} nozzleNumber - Nozzle number
+     * @param {string} presetType - 'Volume', 'Amount', or null for no preset
+     * @param {number} presetDose - Preset dose value
+     * @param {number} price - Price per liter
+     * @param {string} user - User/Attendant name (optional, for PTS-2 tracking)
      */
-    async authorizePump(pumpNumber, nozzleNumber, presetType = null, presetDose = null, price = null) {
+    async authorizePump(pumpNumber, nozzleNumber, presetType = null, presetDose = null, price = null, user = null) {
         try {
-            logger.info('Authorizing pump', { pump: pumpNumber, nozzle: nozzleNumber, type: presetType, dose: presetDose, price });
+            logger.info('Authorizing pump', { pump: pumpNumber, nozzle: nozzleNumber, type: presetType, dose: presetDose, price, user });
 
             const response = await this.ptsClient.createComplexRequest([{
                 function: this.ptsClient.PumpAuthorize.bind(this.ptsClient),
-                arguments: [pumpNumber, nozzleNumber, presetType, presetDose, price]
+                arguments: [pumpNumber, nozzleNumber, presetType, presetDose, price, user]
             }]);
 
             if (response.Packets && response.Packets[0]) {
@@ -244,6 +383,32 @@ class FuelService extends EventEmitter {
         } catch (error) {
             logger.error('Error authorizing pump', { pump: pumpNumber, error: error.message });
             throw error;
+        }
+    }
+
+    /**
+     * Ensure a user (attendant) exists in the PTS configuration
+     * @param {string} userId - The unique user ID/code
+     * @param {string} name - The user's name
+     */
+    async ensureUserExists(userId, name) {
+        if (!userId) return;
+
+        try {
+            logger.debug('Ensuring user exists in PTS', { userId, name });
+            // By sending AddUserConfiguration, if the user exists it might update or error
+            // We'll optimistically try to add it. 
+            // Most PTS controllers will update or ignore if exists.
+
+            await this.ptsClient.createComplexRequest([{
+                function: this.ptsClient.AddUserConfiguration.bind(this.ptsClient),
+                arguments: [userId, name, ['AuthorizePump', 'ViewTransactions']]
+            }]);
+
+        } catch (error) {
+            // Log but don't fail the flow - if registration fails, we still try to authorize
+            // It might fail if user already exists
+            logger.warn('Failed to register user in PTS (safely ignored)', { userId, error: error.message });
         }
     }
 
@@ -420,6 +585,28 @@ class FuelService extends EventEmitter {
     setPumpsToPoll(pumpNumbers) {
         this.pumpsToPoll = Array.isArray(pumpNumbers) ? pumpNumbers : [pumpNumbers];
         logger.info('Updated pumps to poll', { pumps: this.pumpsToPoll });
+    }
+
+    /**
+     * Set which probes to poll
+     */
+    setProbesToPoll(probeNumbers) {
+        this.probesToPoll = Array.isArray(probeNumbers) ? probeNumbers : [probeNumbers];
+        logger.info('Updated probes to poll', { probes: this.probesToPoll });
+    }
+
+    /**
+     * Get list of configured pumps (discovered)
+     */
+    getConfiguredPumps() {
+        return Array.from(this.configuredPumps);
+    }
+
+    /**
+     * Get list of configured probes (discovered)
+     */
+    getConfiguredProbes() {
+        return Array.from(this.configuredProbes);
     }
 }
 

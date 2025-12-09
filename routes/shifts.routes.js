@@ -53,7 +53,7 @@ router.get('/', authenticate, async (req, res) => {
             status: req.query.status,
             limit: parseInt(req.query.limit) || 100
         };
-        
+
         const shifts = await employeeShiftService.getAll(filters);
         res.json({
             error: false,
@@ -107,7 +107,7 @@ router.get('/open', authenticate, async (req, res) => {
         }
 
         const shift = await employeeShiftService.getOpenShift(employee_id, station_id);
-        
+
         if (!shift) {
             return res.status(404).json({
                 error: true,
@@ -175,7 +175,7 @@ router.get('/open', authenticate, async (req, res) => {
 router.get('/:id', authenticate, async (req, res) => {
     try {
         const shift = await employeeShiftService.getById(req.params.id);
-        
+
         if (!shift) {
             return res.status(404).json({
                 error: true,
@@ -356,7 +356,7 @@ router.post('/:id/end', authenticate, async (req, res) => {
 router.put('/:id', authenticate, async (req, res) => {
     try {
         const shift = await employeeShiftService.update(req.params.id, req.body);
-        
+
         if (!shift) {
             return res.status(404).json({
                 error: true,
@@ -373,6 +373,157 @@ router.put('/:id', authenticate, async (req, res) => {
         res.status(500).json({
             error: true,
             message: error.message || 'Failed to update shift'
+        });
+    }
+});
+
+/**
+ * @swagger
+ * /api/shifts/{id}/transactions:
+ *   get:
+ *     summary: Get all transactions for a shift
+ *     tags: [Shifts]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Shift with transactions
+ *       404:
+ *         description: Shift not found
+ */
+router.get('/:id/transactions', authenticate, async (req, res) => {
+    try {
+        const shift = await employeeShiftService.getShiftWithTransactions(req.params.id);
+
+        if (!shift) {
+            return res.status(404).json({
+                error: true,
+                message: 'Shift not found'
+            });
+        }
+
+        res.json({
+            error: false,
+            data: shift
+        });
+    } catch (error) {
+        logger.error('Error getting shift transactions', error);
+        res.status(500).json({
+            error: true,
+            message: error.message || 'Failed to get shift transactions'
+        });
+    }
+});
+
+/**
+ * @swagger
+ * /api/shifts/{id}/summary:
+ *   get:
+ *     summary: Get shift summary with totals
+ *     tags: [Shifts]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Shift summary with calculated totals
+ *       404:
+ *         description: Shift not found
+ */
+router.get('/:id/summary', authenticate, async (req, res) => {
+    try {
+        const summary = await employeeShiftService.getShiftSummary(req.params.id);
+
+        if (!summary) {
+            return res.status(404).json({
+                error: true,
+                message: 'Shift not found'
+            });
+        }
+
+        res.json({
+            error: false,
+            data: summary
+        });
+    } catch (error) {
+        logger.error('Error getting shift summary', error);
+        res.status(500).json({
+            error: true,
+            message: error.message || 'Failed to get shift summary'
+        });
+    }
+});
+
+/**
+ * @swagger
+ * /api/shifts/{id}/reconcile:
+ *   post:
+ *     summary: Reconcile shift with actual cash counts
+ *     tags: [Shifts]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               closing_cash:
+ *                 type: number
+ *                 description: Actual cash counted
+ *               closing_totals:
+ *                 type: object
+ *                 description: Optional manual totals override
+ *               cleared:
+ *                 type: boolean
+ *                 description: Mark as reconciled and cleared
+ *     responses:
+ *       200:
+ *         description: Shift reconciled
+ *       404:
+ *         description: Shift not found
+ */
+router.post('/:id/reconcile', authenticate, async (req, res) => {
+    try {
+        const shift = await employeeShiftService.endShiftWithTotals(req.params.id, req.body);
+
+        if (!shift) {
+            return res.status(404).json({
+                error: true,
+                message: 'Shift not found'
+            });
+        }
+
+        res.json({
+            error: false,
+            data: shift
+        });
+    } catch (error) {
+        logger.error('Error reconciling shift', error);
+        res.status(500).json({
+            error: true,
+            message: error.message || 'Failed to reconcile shift'
         });
     }
 });

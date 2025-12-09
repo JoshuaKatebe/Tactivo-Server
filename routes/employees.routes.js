@@ -9,6 +9,7 @@
 const express = require('express');
 const router = express.Router();
 const employeeService = require('../services/employee.service');
+const roleService = require('../services/role.service');
 const { authenticate } = require('../middleware/auth');
 const logger = require('../utils/logger');
 
@@ -101,7 +102,7 @@ router.get('/', authenticate, async (req, res) => {
             station_id: req.query.station_id,
             active: req.query.active !== undefined ? req.query.active === 'true' : undefined
         };
-        
+
         const employees = await employeeService.getAll(filters);
         res.json({
             error: false,
@@ -193,7 +194,7 @@ router.get('/', authenticate, async (req, res) => {
 router.get('/:id', authenticate, async (req, res) => {
     try {
         const employee = await employeeService.getById(req.params.id);
-        
+
         if (!employee) {
             return res.status(404).json({
                 error: true,
@@ -244,7 +245,23 @@ router.post('/', authenticate, async (req, res) => {
             company_id, station_id, user_id, first_name, last_name,
             badge_tag, card_id, phone, employee_code, active
         });
-        
+
+        // Sync to PTS Controller
+        try {
+            const fuelService = req.app.locals.fuelService;
+            if (fuelService) {
+                const fullName = employee.last_name ? `${employee.first_name} ${employee.last_name}` : employee.first_name;
+                const identity = employee.employee_code || fullName;
+
+                // Run in background to not block response
+                fuelService.ensureUserExists(identity, identity).catch(err =>
+                    logger.warn('Failed to sync new employee to PTS', { id: employee.id, error: err.message })
+                );
+            }
+        } catch (error) {
+            logger.warn('Error initiating PTS sync for new employee', { error: error.message });
+        }
+
         res.status(201).json({
             error: false,
             data: employee
@@ -265,12 +282,28 @@ router.post('/', authenticate, async (req, res) => {
 router.put('/:id', authenticate, async (req, res) => {
     try {
         const employee = await employeeService.update(req.params.id, req.body);
-        
+
         if (!employee) {
             return res.status(404).json({
                 error: true,
                 message: 'Employee not found'
             });
+        }
+
+        // Sync to PTS Controller
+        try {
+            const fuelService = req.app.locals.fuelService;
+            if (fuelService) {
+                const fullName = employee.last_name ? `${employee.first_name} ${employee.last_name}` : employee.first_name;
+                const identity = employee.employee_code || fullName;
+
+                // Run in background to not block response
+                fuelService.ensureUserExists(identity, identity).catch(err =>
+                    logger.warn('Failed to sync updated employee to PTS', { id: employee.id, error: err.message })
+                );
+            }
+        } catch (error) {
+            logger.warn('Error initiating PTS sync for updated employee', { error: error.message });
         }
 
         res.json({
@@ -293,7 +326,7 @@ router.put('/:id', authenticate, async (req, res) => {
 router.delete('/:id', authenticate, async (req, res) => {
     try {
         const employee = await employeeService.delete(req.params.id);
-        
+
         if (!employee) {
             return res.status(404).json({
                 error: true,
@@ -310,6 +343,73 @@ router.delete('/:id', authenticate, async (req, res) => {
         res.status(500).json({
             error: true,
             message: error.message || 'Failed to delete employee'
+        });
+    }
+});
+
+/**
+ * @swagger
+ * /api/employees/{id}/roles:
+ *   get:
+ *     summary: Get employee roles
+ *     description: Get all roles assigned to an employee
+ *     tags: [Employees]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: List of employee roles
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: boolean
+ *                   example: false
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: string
+ *                         format: uuid
+ *                       name:
+ *                         type: string
+ *                       description:
+ *                         type: string
+ *       404:
+ *         description: Employee not found
+ */
+router.get('/:id/roles', authenticate, async (req, res) => {
+    try {
+        // First check if employee exists
+        const employee = await employeeService.getById(req.params.id);
+        if (!employee) {
+            return res.status(404).json({
+                error: true,
+                message: 'Employee not found'
+            });
+        }
+
+        const roles = await roleService.getEmployeeRoles(req.params.id);
+        res.json({
+            error: false,
+            data: roles
+        });
+    } catch (error) {
+        logger.error('Error getting employee roles', error);
+        res.status(500).json({
+            error: true,
+            message: error.message || 'Failed to get employee roles'
         });
     }
 });

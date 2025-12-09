@@ -37,6 +37,7 @@ const nozzleRoutes = require('./routes/nozzles.routes');
 const stationShiftRoutes = require('./routes/station-shifts.routes');
 const debtorRoutes = require('./routes/debtors.routes');
 const stockRoutes = require('./routes/stock.routes');
+const attendantRoutes = require('./routes/attendant.routes');
 
 // Import services
 const FuelService = require('./services/fuel.service');
@@ -94,6 +95,7 @@ app.use('/api/nozzles', nozzleRoutes);
 app.use('/api/station-shifts', stationShiftRoutes);
 app.use('/api/debtors', debtorRoutes);
 app.use('/api/stock', stockRoutes);
+app.use('/api/attendants', attendantRoutes);
 app.use('/api/roles', roleRoutes);
 app.use('/api/permissions', permissionRoutes);
 
@@ -106,13 +108,13 @@ let fuelService;
 async function initializeServices() {
     try {
         logger.info('Initializing services...');
-        
+
         // Initialize database
         db.initDatabase();
-        
+
         // Initialize Fuel Service
         fuelService = new FuelService(config.pts);
-        
+
         // Set up WebSocket broadcast handler
         fuelService.on('statusUpdate', (data) => {
             broadcastToClients(JSON.stringify({
@@ -120,24 +122,24 @@ async function initializeServices() {
                 data: data
             }));
         });
-        
+
         fuelService.on('transactionUpdate', (data) => {
             broadcastToClients(JSON.stringify({
                 type: 'transaction',
                 data: data
             }));
         });
-        
+
         fuelService.on('tankUpdate', (data) => {
             broadcastToClients(JSON.stringify({
                 type: 'tankStatus',
                 data: data
             }));
         });
-        
+
         // Start polling
         await fuelService.startPolling();
-        
+
         logger.info('Services initialized successfully');
     } catch (error) {
         logger.error('Failed to initialize services', error);
@@ -151,7 +153,7 @@ const clients = new Set();
 wss.on('connection', (ws, req) => {
     logger.info('WebSocket client connected', { ip: req.socket.remoteAddress });
     clients.add(ws);
-    
+
     // Send initial pump statuses
     if (fuelService) {
         const statuses = fuelService.getPumpStatuses();
@@ -160,12 +162,12 @@ wss.on('connection', (ws, req) => {
             data: statuses
         }));
     }
-    
+
     ws.on('message', (message) => {
         try {
             const data = JSON.parse(message);
             logger.debug('WebSocket message received', data);
-            
+
             // Handle client messages if needed
             if (data.type === 'ping') {
                 ws.send(JSON.stringify({ type: 'pong' }));
@@ -174,17 +176,17 @@ wss.on('connection', (ws, req) => {
             logger.error('Error processing WebSocket message', error);
         }
     });
-    
+
     ws.on('close', () => {
         logger.info('WebSocket client disconnected');
         clients.delete(ws);
     });
-    
+
     ws.on('error', (error) => {
         logger.error('WebSocket error', error);
         clients.delete(ws);
     });
-    
+
     // Send ping every 30 seconds to keep connection alive
     const pingInterval = setInterval(() => {
         if (ws.isAlive === false) {
@@ -195,7 +197,7 @@ wss.on('connection', (ws, req) => {
         ws.isAlive = false;
         ws.ping();
     }, 30000);
-    
+
     ws.on('pong', () => {
         ws.isAlive = true;
     });
@@ -236,19 +238,39 @@ app.use((req, res) => {
 
 // Start server
 const PORT = config.server.port || 3000;
+const HOST = process.env.HOST || '0.0.0.0'; // Listen on all network interfaces
+
+// Get local IP address for network access
+function getLocalIP() {
+    const os = require('os');
+    const interfaces = os.networkInterfaces();
+    for (const name of Object.keys(interfaces)) {
+        for (const iface of interfaces[name]) {
+            // Skip internal (loopback) and non-IPv4 addresses
+            if (iface.family === 'IPv4' && !iface.internal) {
+                return iface.address;
+            }
+        }
+    }
+    return 'localhost';
+}
 
 async function startServer() {
     try {
         // Initialize services first
         await initializeServices();
-        
+
         // Set fuelService in app.locals for route access
         app.locals.fuelService = fuelService;
-        
+
         // Start HTTP server
-        server.listen(PORT, () => {
+        server.listen(PORT, HOST, () => {
+            const localIP = getLocalIP();
             logger.info(`🚀 Tactivo Server running on port ${PORT}`);
-            logger.info(`📡 WebSocket server available at ws://localhost:${PORT}/ws`);
+            logger.info(`📍 Local access: http://localhost:${PORT}`);
+            logger.info(`🌐 Network access: http://${localIP}:${PORT}`);
+            logger.info(`📡 WebSocket server: ws://${localIP}:${PORT}/ws`);
+            logger.info(`📚 Swagger UI: http://${localIP}:${PORT}/api-docs`);
             logger.info(`🔌 PTS Controller: ${config.pts.url}`);
         });
     } catch (error) {

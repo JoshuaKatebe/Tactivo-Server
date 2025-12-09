@@ -189,8 +189,58 @@ router.delete('/:id', authenticate, async (req, res) => {
 });
 
 /**
- * POST /api/roles/:roleId/assign/:employeeId
- * Assign role to employee
+ * @swagger
+ * /api/roles/{roleId}/assign/{employeeId}:
+ *   post:
+ *     summary: Assign role to employee
+ *     description: Assign a role to an employee. The employee must exist and the role must exist.
+ *     tags: [Roles]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: roleId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Role ID to assign
+ *       - in: path
+ *         name: employeeId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Employee ID to assign role to
+ *     responses:
+ *       200:
+ *         description: Role assigned successfully
+ *       400:
+ *         description: Failed to assign role
+ *   delete:
+ *     summary: Remove role from employee
+ *     description: Remove a role assignment from an employee
+ *     tags: [Roles]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: roleId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: path
+ *         name: employeeId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Role removed successfully
+ *       404:
+ *         description: Role assignment not found
  */
 router.post('/:roleId/assign/:employeeId', authenticate, async (req, res) => {
     try {
