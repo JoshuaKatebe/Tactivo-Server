@@ -10,6 +10,7 @@ module.exports = {
         env: process.env.NODE_ENV || 'development'
     },
     pts: {
+        enabled: process.env.PTS_ENABLED !== 'false', // Default to true if not specified
         url: process.env.PTS_URL || 'http://192.168.1.117/jsonPTS',
         username: process.env.PTS_USERNAME || 'admin',
         password: process.env.PTS_PASSWORD || 'admin',

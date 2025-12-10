@@ -112,33 +112,38 @@ async function initializeServices() {
         // Initialize database
         db.initDatabase();
 
-        // Initialize Fuel Service
-        fuelService = new FuelService(config.pts);
+        // Initialize Fuel Service (if enabled)
+        if (config.pts.enabled) {
+            fuelService = new FuelService(config.pts);
 
-        // Set up WebSocket broadcast handler
-        fuelService.on('statusUpdate', (data) => {
-            broadcastToClients(JSON.stringify({
-                type: 'pumpStatus',
-                data: data
-            }));
-        });
+            // Set up WebSocket broadcast handler
+            fuelService.on('statusUpdate', (data) => {
+                broadcastToClients(JSON.stringify({
+                    type: 'pumpStatus',
+                    data: data
+                }));
+            });
 
-        fuelService.on('transactionUpdate', (data) => {
-            broadcastToClients(JSON.stringify({
-                type: 'transaction',
-                data: data
-            }));
-        });
+            fuelService.on('transactionUpdate', (data) => {
+                broadcastToClients(JSON.stringify({
+                    type: 'transaction',
+                    data: data
+                }));
+            });
 
-        fuelService.on('tankUpdate', (data) => {
-            broadcastToClients(JSON.stringify({
-                type: 'tankStatus',
-                data: data
-            }));
-        });
+            fuelService.on('tankUpdate', (data) => {
+                broadcastToClients(JSON.stringify({
+                    type: 'tankStatus',
+                    data: data
+                }));
+            });
 
-        // Start polling
-        await fuelService.startPolling();
+            // Start polling
+            await fuelService.startPolling();
+            logger.info('⛽ Fuel Service initialized (Local Mode)');
+        } else {
+            logger.info('☁️ Fuel Service DISABLED (Cloud/API Mode) - PTS connection skipped');
+        }
 
         logger.info('Services initialized successfully');
     } catch (error) {
