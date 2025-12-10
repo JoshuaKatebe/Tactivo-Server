@@ -4,6 +4,24 @@
 
 const swaggerJsdoc = require('swagger-jsdoc');
 
+const os = require('os');
+require('dotenv').config();
+
+function getLocalIP() {
+    const interfaces = os.networkInterfaces();
+    for (const name of Object.keys(interfaces)) {
+        for (const iface of interfaces[name]) {
+            if (iface.family === 'IPv4' && !iface.internal) {
+                return iface.address;
+            }
+        }
+    }
+    return 'localhost';
+}
+
+const port = process.env.PORT || 3000;
+const localIP = getLocalIP();
+
 const options = {
     definition: {
         openapi: '3.0.0',
@@ -22,8 +40,12 @@ const options = {
         },
         servers: [
             {
-                url: 'http://localhost:3000',
-                description: 'Development server'
+                url: `http://${localIP}:${port}`,
+                description: 'Local Network Server'
+            },
+            {
+                url: `http://localhost:${port}`,
+                description: 'Localhost'
             },
             {
                 url: 'https://api.tactivo.com',
