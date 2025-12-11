@@ -38,6 +38,7 @@ const stationShiftRoutes = require('./routes/station-shifts.routes');
 const debtorRoutes = require('./routes/debtors.routes');
 const stockRoutes = require('./routes/stock.routes');
 const attendantRoutes = require('./routes/attendant.routes');
+const demoRoutes = require('./routes/demo.routes');
 
 // Import services
 const FuelService = require('./services/fuel.service');
@@ -98,6 +99,7 @@ app.use('/api/stock', stockRoutes);
 app.use('/api/attendants', attendantRoutes);
 app.use('/api/roles', roleRoutes);
 app.use('/api/permissions', permissionRoutes);
+app.use('/api/demo', demoRoutes);
 
 // WebSocket Server for real-time updates
 const wss = new WebSocket.Server({ server, path: '/ws' });
@@ -111,6 +113,13 @@ async function initializeServices() {
 
         // Initialize database
         db.initDatabase();
+
+        // 🎮 Initialize Demo Service (Always available for demos)
+        const DemoFuelService = require('./services/demo-fuel.service');
+        const demoFuelService = new DemoFuelService();
+        await demoFuelService.startPolling(); // Starts physics loop
+        app.locals.demoFuelService = demoFuelService;
+        logger.info('🎮 Demo Mode API initialized at /api/demo');
 
         // Initialize Fuel Service (if enabled)
         if (config.pts.enabled) {

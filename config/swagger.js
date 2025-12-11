@@ -48,7 +48,7 @@ const options = {
                 description: 'Localhost'
             },
             {
-                url: 'https://api.tactivo.com',
+                url: 'https://tactivo-server-1.onrender.com',
                 description: 'Production server'
             }
         ],
@@ -341,7 +341,8 @@ const options = {
             { name: 'Stock', description: 'Stock and inventory management' },
             { name: 'Roles', description: 'Role management' },
             { name: 'Permissions', description: 'Permission management' },
-            { name: 'Health', description: 'System health checks' }
+            { name: 'Health', description: 'System health checks' },
+            { name: 'Demo', description: 'Simulation and Demo Mode APIs' }
         ]
     },
     apis: ['./routes/*.js', './index.js'] // Path to the API files
