@@ -35,7 +35,9 @@ router.post('/fuel/pumps/:id/authorize', checkDemoService, async (req, res) => {
             req.body.nozzle || 1,
             req.body.type,
             req.body.dose,
-            req.body.price
+            req.body.price,
+            req.body.employee_id,
+            req.body.station_id
         );
         res.json({ error: false, data: result });
     } catch (e) {

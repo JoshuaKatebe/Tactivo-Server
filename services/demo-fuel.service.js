@@ -1,6 +1,7 @@
 const EventEmitter = require('events');
 const logger = require('../utils/logger');
 const db = require('../lib/db');
+const handoverService = require('./handover.service');
 
 class DemoFuelService extends EventEmitter {
     constructor() {
@@ -115,12 +116,43 @@ class DemoFuelService extends EventEmitter {
 
     async saveDemoTransaction(status) {
         try {
-            await db.query(
-                `INSERT INTO demo_fuel_transactions 
-                 (pump_number, nozzle, volume, amount, price, transaction_datetime, synced)
-                 VALUES ($1, $2, $3, $4, $5, NOW(), true)`,
-                [status.Pump, status.Nozzle, status.Volume, status.Amount, status.Price]
+            // Insert into main fuel_transactions table to link with system
+            const result = await db.query(
+                `INSERT INTO fuel_transactions
+                 (station_id, pump_number, nozzle, volume, amount, price,
+                  transaction_datetime, authorized_by_employee_id, synced)
+                 VALUES ($1, $2, $3, $4, $5, $6, NOW(), $7, true)
+                 RETURNING id`,
+                [
+                    status.StationId || null,
+                    status.Pump,
+                    status.Nozzle,
+                    status.Volume,
+                    status.Amount,
+                    status.Price,
+                    status.AuthorizedByEmployeeId || null
+                ]
             );
+
+            // Also save to demo table for historical reasons if needed, or we can deprecate it.
+            // But let's keep it for the specific demo reports endpoint if it relies on it.
+            // Actually, the requirement is "Demo APIs should mark which attendants sold the dummy fuel
+            // and should be linked to the rest of the system".
+            // So writing to main table is the key.
+
+            // Check for handover trigger
+            if (status.AuthorizedByEmployeeId && status.StationId && result.rows[0]) {
+                 try {
+                     await handoverService.checkAndCreateHandover(
+                         status.AuthorizedByEmployeeId,
+                         status.StationId,
+                         result.rows[0].id
+                     );
+                 } catch (err) {
+                     logger.error('Error checking handover trigger for demo txn', err);
+                 }
+            }
+
         } catch (e) {
             logger.error('Error saving demo transaction', e);
         }
@@ -140,7 +172,7 @@ class DemoFuelService extends EventEmitter {
         return result;
     }
 
-    async authorizePump(pumpNumber, nozzleNumber, presetType, presetDose, price) {
+    async authorizePump(pumpNumber, nozzleNumber, presetType, presetDose, price, employeeId, stationId) {
         const status = this.pumps.get(parseInt(pumpNumber));
         if (!status) throw new Error('Invalid Pump');
 
@@ -149,6 +181,10 @@ class DemoFuelService extends EventEmitter {
         status.Price = price || 1.65;
         status.Volume = 0;
         status.Amount = 0;
+
+        // Store authorization details for later use when saving
+        status.AuthorizedByEmployeeId = employeeId || null;
+        status.StationId = stationId || null;
 
         this.emit('statusUpdate', { pump: pumpNumber, status: status });
         return { success: true, message: 'Pump Authorized (Demo)' };
