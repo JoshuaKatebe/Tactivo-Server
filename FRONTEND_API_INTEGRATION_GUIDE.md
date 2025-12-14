@@ -1,252 +1,312 @@
-# Frontend API Integration Guide (React)
-## Comprehensive Guide for Tactivo Fuel Management System
+# Frontend API Integration Guide & Reference
+## Tactivo Fuel Management System
 
-**Base URL:** `https://tactivo-server-1.onrender.com`
-**WebSocket URL:** `wss://tactivo-server-1.onrender.com/ws` (Note: Use `wss://` for secure WebSocket connection)
+**Server Base URL:** `https://tactivo-server-1.onrender.com/api`
+**WebSocket URL:** `wss://tactivo-server-1.onrender.com/ws`
+
+This guide provides a comprehensive reference for frontend developers integrating with the Tactivo backend. It includes workflow guides, detailed API references, and data type definitions suitable for AI code generation contexts.
 
 ---
 
 ## Table of Contents
-1. [Overview](#overview)
-2. [Quick Start](#quick-start)
-3. [Fuel Dispensing Workflow](#fuel-dispensing-workflow)
-4. [Handover System (New Feature)](#handover-system-new-feature)
-5. [Demo Mode Integration](#demo-mode-integration)
-6. [Real-time Monitoring](#real-time-monitoring)
-7. [API Reference](#api-reference)
+
+1. [Authentication & Security](#authentication--security)
+2. [Data Types (TypeScript Interfaces)](#data-types-typescript-interfaces)
+3. [Core Workflows](#core-workflows)
+    - [Attendant Login & Shift Start](#attendant-login--shift-start)
+    - [Fuel Dispensing (Real & Demo)](#fuel-dispensing-real--demo)
+    - [Handover Process](#handover-process)
+    - [Shop Sales](#shop-sales)
+4. [Real-time WebSocket API](#real-time-websocket-api)
+5. [Full API Reference](#full-api-reference)
+    - [Organization & Station Management](#organization--station-management)
+    - [Staff Management](#staff-management)
+    - [Fuel Operations](#fuel-operations)
+    - [Shop & Stock](#shop--stock)
+    - [Reports & Analytics](#reports--analytics)
+    - [Finance & Handovers](#finance--handovers)
+    - [System Configuration](#system-configuration)
 
 ---
 
-## Overview
+## Authentication & Security
 
-This guide details how to integrate your frontend application (React, Flutter, or other) with the Tactivo backend. It covers the core fuel dispensing cycle, the new automated handover system, and how to effectively use the Demo Mode for testing and development.
+Most endpoints require a valid JWT token in the `Authorization` header.
 
-### Core Concepts
+**Header Format:**
+```http
+Authorization: Bearer <your_jwt_token>
+```
 
-*   **Attendant:** The employee dispensing fuel.
-*   **Station:** The physical location.
-*   **Pump/Nozzle:** The hardware dispensing fuel.
-*   **Handover:** A process where an attendant clears their cash balance after accumulating 10 transactions.
-*   **Demo Mode:** A simulation mode that generates realistic fuel transaction data without hardware.
+**Obtaining a Token:**
+1.  **Global Users (Admins/Managers):** Use `POST /auth/login` with username/password.
+2.  **Attendants (POS):** Use `POST /attendants/login` with an employee code and station ID.
 
 ---
 
-## Quick Start
+## Data Types (TypeScript Interfaces)
 
-### 1. API Client Setup
+Use these definitions for type safety and AI context.
 
-Configure your HTTP client (e.g., `axios` or `fetch`) to point to the production server.
+```typescript
+// --- Core Entities ---
 
-```javascript
-// api-client.js
-const API_BASE_URL = 'https://tactivo-server-1.onrender.com/api';
-
-class ApiClient {
-  constructor() {
-    this.token = localStorage.getItem('auth_token');
-  }
-
-  async request(endpoint, options = {}) {
-    const headers = {
-      'Content-Type': 'application/json',
-      ...(this.token && { 'Authorization': `Bearer ${this.token}` }),
-      ...options.headers,
-    };
-
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-      ...options,
-      headers,
-    });
-
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.message || 'API Error');
-    return data;
-  }
+interface Organization {
+  id: string; // UUID
+  name: string;
+  created_at: string; // ISO Date
 }
 
-export const api = new ApiClient();
+interface Station {
+  id: string;
+  company_id: string;
+  name: string;
+  code: string;
+  address?: string;
+  timezone: string;
+}
+
+interface Employee {
+  id: string;
+  company_id: string;
+  station_id?: string;
+  user_id?: string; // Linked global user
+  first_name: string;
+  last_name: string;
+  employee_code: string; // Login code
+  active: boolean;
+  role?: string;
+}
+
+// --- Operations ---
+
+interface Shift {
+  id: string;
+  station_id: string;
+  employee_id: string;
+  start_time: string;
+  end_time?: string; // null if active
+  status: 'open' | 'closed';
+  opening_cash: number;
+}
+
+interface FuelTransaction {
+  id: string;
+  station_id: string;
+  pump_number: number;
+  nozzle: number;
+  volume: number;
+  amount: number; // Total price
+  price: number; // Price per unit
+  transaction_datetime: string;
+  authorized_by_employee_id?: string;
+  synced: boolean;
+}
+
+interface Handover {
+  id: string;
+  station_id: string;
+  employee_id: string;
+  amount_expected: number;
+  amount_cashed: number;
+  difference: number;
+  status: 'pending' | 'cleared';
+  handover_time: string;
+  transactions?: FuelTransaction[];
+}
+
+interface ShopProduct {
+  id: string;
+  sku: string;
+  name: string;
+  price: number;
+  stock_qty: number;
+}
+
+// --- API Responses ---
+
+interface ApiResponse<T> {
+  error: boolean;
+  message?: string;
+  data: T;
+}
 ```
 
 ---
 
-## Fuel Dispensing Workflow
+## Core Workflows
 
-The standard workflow for dispensing fuel involves authorization and monitoring.
+### Attendant Login & Shift Start
 
-### 1. Authorize Pump
-Send a request to authorize a specific pump for an attendant.
+1.  **Login:**
+    *   Call `POST /attendants/login` with `{ employee_code: "1234", station_id: "..." }`.
+    *   Store the returned `token` and `employee` object.
 
-```javascript
-async function authorizePump(pumpId, nozzleNumber, amount, attendantId, stationId) {
-  return await api.request(`/fuel/pumps/${pumpId}/authorize`, {
-    method: 'POST',
-    body: JSON.stringify({
-      nozzleNumber: nozzleNumber,
-      presetType: 'Amount',
-      presetDose: amount,
-      price: 1.65, // Fetch current price from config
-      authorized_by_employee_id: attendantId,
-      station_id: stationId
-    })
-  });
-}
-```
+2.  **Check Shift:**
+    *   Call `GET /shifts/open?employee_id={id}`.
+    *   If `null`, prompt to start shift.
 
-### 2. Complete Transaction
-Once fueling is done (monitored via WebSocket), the transaction is automatically recorded. You can optionally call a "close" endpoint if manual confirmation is required by your UI flow, but the backend handles completion automatically upon receiving the "EndOfTransaction" signal from the controller (or Demo service).
+3.  **Start Shift:**
+    *   Call `POST /shifts/start` with `{ employee_id: "...", station_id: "...", opening_cash: 100 }`.
 
----
+### Fuel Dispensing (Real & Demo)
 
-## Handover System (New Feature)
+**Standard Flow:**
+1.  **Select Pump:** User taps a pump icon.
+2.  **Get Configuration:** Call `GET /fuel/pumps/{id}` to see status (Idle/Filling) and nozzles.
+3.  **Authorize:**
+    *   Call `POST /fuel/pumps/{id}/authorize` with `{ nozzleNumber: 1, presetType: "Amount", presetDose: 50 }`.
+    *   **Important:** Include `authorized_by_employee_id` to link the sale to the attendant.
+4.  **Monitor:** Listen to WebSocket `pumpStatus` events to show progress bar.
+5.  **Completion:** Backend records transaction automatically. Frontend receives `transaction` event via WebSocket.
 
-The system automatically enforces a "Handover" rule: **When an attendant accumulates 10 uncleared transactions, a pending handover is created.** The attendant must clear this balance with a cashier to continue efficiently (or simply to follow protocol).
+**Demo/Training Mode:**
+Use this for testing or "Training Mode" in the app.
+*   Use `POST /demo/fuel/pumps/{id}/authorize` instead of the standard fuel API.
+*   **Must include** `employee_id` and `station_id` in the body so the system tracks it like a real sale.
+*   The system simulates the pumping physics and triggers the same WebSocket events.
 
-### 1. Checking for Pending Handovers
-The frontend should periodically check if the current attendant has a pending handover to notify them.
+### Handover Process
 
-**Endpoint:** `GET /api/handovers?employee_id={id}&status=pending`
+**Business Rule:** Attendants must clear their cash after 10 transactions.
 
-```javascript
-async function checkHandoverStatus(employeeId, stationId) {
-  try {
-    const response = await api.request(`/handovers?employee_id=${employeeId}&station_id=${stationId}&status=pending`);
-    const pendingHandovers = response.data;
+**Attendant View:**
+1.  Periodically call `GET /handovers?employee_id={id}&status=pending`.
+2.  If a result is found, block new sales and show "Please visit Cashier".
 
-    if (pendingHandovers.length > 0) {
-      // Notify user: "You have a pending handover. Please visit the cashier."
-      return pendingHandovers[0];
+**Cashier View:**
+1.  Call `GET /handovers/pending?station_id={id}` to see all pending requests.
+2.  Select a handover to view details (`GET /handovers/{id}/transactions`).
+3.  Count physical cash from attendant.
+4.  Call `POST /handovers/{id}/clear` with `{ amount_cashed: 500, payment_methods: { cash: 500 } }`.
+
+### Shop Sales
+
+1.  **Scan/Select Product:**
+    *   Call `GET /shop/products` to list inventory.
+2.  **Create Sale:**
+    *   Call `POST /shop/sales` with items:
+    ```json
+    {
+      "station_id": "...",
+      "employee_id": "...",
+      "items": [
+        { "product_id": "...", "qty": 2, "unit_price": 1.50 }
+      ],
+      "payment_method": "cash"
     }
-    return null;
-  } catch (error) {
-    console.error('Failed to check handover status', error);
-  }
-}
-```
-
-### 2. Cashier Workflow: Clearing a Handover
-A separate "Cashier" or "Manager" view is required to process these handovers.
-
-**Step A: List Pending Handovers**
-Fetch all pending handovers for the station.
-
-```javascript
-// For Cashier Dashboard
-async function getPendingStationHandovers(stationId) {
-  return await api.request(`/handovers/pending?station_id=${stationId}`);
-}
-```
-
-**Step B: View Handover Details**
-When a cashier selects a handover, show the expected amount.
-
-```javascript
-async function getHandoverDetails(handoverId) {
-  // Get handover metadata and linked transactions
-  return await api.request(`/handovers/${handoverId}/transactions`);
-}
-```
-
-**Step C: Clear Handover**
-Submit the payment details to clear the handover.
-
-```javascript
-async function clearHandover(handoverId, cashierId, amountReceived, paymentMethods) {
-  // paymentMethods example: { cash: 500.00, pos: 100.00 }
-  return await api.request(`/handovers/${handoverId}/clear`, {
-    method: 'POST',
-    body: JSON.stringify({
-      cashier_employee_id: cashierId,
-      amount_cashed: amountReceived,
-      payment_methods: paymentMethods,
-      notes: "Cleared at end of shift"
-    })
-  });
-}
-```
+    ```
 
 ---
 
-## Demo Mode Integration
+## Real-time WebSocket API
 
-Use the Demo Mode to simulate fuel transactions without connecting to physical pumps. The new Demo APIs ensure these transactions are linked to your attendants and trigger real system behaviors (like the Handover limit).
+Connect to `wss://tactivo-server-1.onrender.com/ws`.
 
-### 1. Authorize Demo Pump
-Use this specific endpoint to start a simulation. **Crucially, pass `employee_id` and `station_id` so the system can track the sale against the attendant.**
-
-**Endpoint:** `POST /api/demo/fuel/pumps/:id/authorize`
-
-```javascript
-async function startDemoTransaction(pumpId, attendantId, stationId) {
-  return await api.request(`/demo/fuel/pumps/${pumpId}/authorize`, {
-    method: 'POST',
-    body: JSON.stringify({
-      nozzle: 1,
-      type: 'Amount',
-      dose: 50,      // Simulate $50 fuel
-      price: 1.65,
-      employee_id: attendantId, // REQUIRED for handover tracking
-      station_id: stationId     // REQUIRED for station reporting
-    })
-  });
+**Message Structure:**
+```json
+{
+  "type": "pumpStatus", // or 'transaction', 'tankStatus'
+  "data": { ... }
 }
 ```
 
-### 2. Testing the Handover Logic
-To test the handover feature using Demo Mode:
-1.  Log in as an attendant.
-2.  Trigger 10 separate demo transactions using the function above.
-3.  After the 10th transaction completes, call `checkHandoverStatus`. You should see a new pending handover.
-4.  Switch to a Cashier user (or use a different screen) to fetch and clear that handover.
+**Events:**
+*   `pumpStatus`: Real-time updates (Volume, Amount, Status: 'Filling'|'Idle').
+*   `transaction`: Sent when a transaction finalizes.
+*   `tankStatus`: Fuel tank level updates.
 
 ---
 
-## Real-time Monitoring
+## Full API Reference
 
-Connect to the WebSocket to update the UI in real-time as the demo (or real) pump dispenses fuel.
+### Organization & Station Management
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `GET` | `/organizations` | List all organizations |
+| `GET` | `/organizations/:id` | Get organization details |
+| `GET` | `/companies` | List companies (Client entities) |
+| `GET` | `/stations` | List stations |
+| `GET` | `/stations/:id` | Get station configuration |
 
-```javascript
-const WS_URL = 'wss://tactivo-server-1.onrender.com/ws';
+### Staff Management
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `POST` | `/auth/login` | Administrative login |
+| `POST` | `/attendants/login` | POS/Attendant login (requires code) |
+| `GET` | `/employees` | List employees (Filter by station/active) |
+| `GET` | `/roles` | List RBAC roles |
+| `GET` | `/permissions` | List available permissions |
+| `GET` | `/shifts` | History of employee shifts |
+| `GET` | `/shifts/open` | Check for active shift |
+| `POST` | `/shifts/start` | Clock in |
+| `POST` | `/shifts/:id/end` | Clock out |
 
-function connectWebSocket(onMessage) {
-  const ws = new WebSocket(WS_URL);
+### Fuel Operations
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `GET` | `/fuel/pumps` | Status of all pumps |
+| `GET` | `/fuel/pumps/:id` | Status of specific pump |
+| `POST` | `/fuel/pumps/:id/authorize` | Authorize pump for fueling |
+| `POST` | `/fuel/pumps/:id/stop` | Stop pumping |
+| `POST` | `/fuel/pumps/:id/emergency-stop`| Immediate Halt |
+| `GET` | `/fuel/tanks` | Tank levels |
+| `GET` | `/fuel-transactions` | Transaction history |
+| `POST` | `/demo/fuel/pumps/:id/authorize`| **Demo:** Simulate authorization |
 
-  ws.onopen = () => console.log('Connected to Pump Stream');
-  
-  ws.onmessage = (event) => {
-    const message = JSON.parse(event.data);
-    
-    // Types: 'pumpStatus', 'transaction', 'tankStatus'
-    if (message.type === 'pumpStatus') {
-      const { pump, status } = message.data;
-      // Update UI: status.Status (Idle, Filling, Authorized), status.Volume, status.Amount
-      onMessage(pump, status);
-    }
-  };
+### Shop & Stock
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `GET` | `/shop/products` | Product catalog & stock |
+| `POST` | `/shop/sales` | Record retail sale |
+| `GET` | `/shop/sales` | Sales history |
+| `GET` | `/stock/low-stock` | Low stock alerts |
+| `POST` | `/stock/stock-in` | Receive inventory |
+| `POST` | `/stock/adjust` | Manual inventory adjustment |
 
-  return ws;
+### Reports & Analytics
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `GET` | `/reports/sales` | Aggregated sales (by shift/day/month) |
+| `GET` | `/reports/fuel` | Fuel-specific volume reports |
+| `GET` | `/reports/inventory` | Stock movement reports |
+| `GET` | `/reports/employee` | Attendant performance metrics |
+| `GET` | `/reports/financial` | Financial reconciliation |
+
+### Finance & Handovers
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `GET` | `/handovers` | List handovers |
+| `GET` | `/handovers/pending` | **Cashier:** View actionable handovers |
+| `GET` | `/handovers/:id/transactions`| View transactions in a handover |
+| `POST` | `/handovers/:id/clear` | **Cashier:** Clear/Pay out handover |
+| `GET` | `/payments` | Payment ledger |
+
+### System Configuration
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `GET` | `/pts-controllers` | List PTS hardware controllers |
+| `GET` | `/pumps` | Configure logical pumps |
+| `GET` | `/nozzles` | Configure nozzles & grades |
+| `GET` | `/health` | Server status check |
+
+---
+
+## Error Handling
+
+The API returns standard HTTP status codes.
+
+*   `200 OK`: Success
+*   `400 Bad Request`: Invalid input (check parameters).
+*   `401 Unauthorized`: Missing or invalid token.
+*   `403 Forbidden`: Valid token but insufficient permissions.
+*   `404 Not Found`: Resource does not exist.
+*   `500 Internal Server Error`: Server-side issue.
+
+**Error Body Format:**
+```json
+{
+  "error": true,
+  "message": "Descriptive error message"
 }
 ```
-
----
-
-## API Reference Summary
-
-### Authentication
-*   `POST /auth/login` - Login user
-
-### Employees
-*   `GET /employees` - List employees
-*   `POST /attendants/login` - Shift login for attendants
-
-### Fuel & Demo
-*   `POST /fuel/pumps/:id/authorize` - Real pump auth
-*   `POST /demo/fuel/pumps/:id/authorize` - **Demo pump auth (Use for testing)**
-
-### Handovers
-*   `GET /handovers/pending` - List all pending handovers (Cashier view)
-*   `GET /handovers?employee_id=...&status=pending` - Check specific attendant status
-*   `POST /handovers/:id/clear` - Clear a handover
-
-### Reports
-*   `GET /reports/sales` - General sales report
-*   `GET /reports/attendants/:id` - Attendant performance
