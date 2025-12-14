@@ -4,7 +4,7 @@
 **Server Base URL:** `https://tactivo-server-1.onrender.com/api`
 **WebSocket URL:** `wss://tactivo-server-1.onrender.com/ws`
 
-This guide provides a comprehensive reference for frontend developers integrating with the Tactivo backend. It includes workflow guides, detailed API references, and data type definitions suitable for AI code generation contexts.
+This guide provides a comprehensive reference for frontend developers integrating with the Tactivo backend. It includes workflow guides, detailed API references with request/response examples, and data type definitions suitable for AI code generation contexts.
 
 ---
 
@@ -19,13 +19,10 @@ This guide provides a comprehensive reference for frontend developers integratin
     - [Shop Sales](#shop-sales)
 4. [Real-time WebSocket API](#real-time-websocket-api)
 5. [Full API Reference](#full-api-reference)
-    - [Organization & Station Management](#organization--station-management)
     - [Staff Management](#staff-management)
     - [Fuel Operations](#fuel-operations)
-    - [Shop & Stock](#shop--stock)
-    - [Reports & Analytics](#reports--analytics)
     - [Finance & Handovers](#finance--handovers)
-    - [System Configuration](#system-configuration)
+    - [Reports & Analytics](#reports--analytics)
 
 ---
 
@@ -38,10 +35,6 @@ Most endpoints require a valid JWT token in the `Authorization` header.
 Authorization: Bearer <your_jwt_token>
 ```
 
-**Obtaining a Token:**
-1.  **Global Users (Admins/Managers):** Use `POST /auth/login` with username/password.
-2.  **Attendants (POS):** Use `POST /attendants/login` with an employee code and station ID.
-
 ---
 
 ## Data Types (TypeScript Interfaces)
@@ -51,43 +44,14 @@ Use these definitions for type safety and AI context.
 ```typescript
 // --- Core Entities ---
 
-interface Organization {
-  id: string; // UUID
-  name: string;
-  created_at: string; // ISO Date
-}
-
-interface Station {
-  id: string;
-  company_id: string;
-  name: string;
-  code: string;
-  address?: string;
-  timezone: string;
-}
-
 interface Employee {
-  id: string;
+  id: string; // UUID
   company_id: string;
   station_id?: string;
-  user_id?: string; // Linked global user
   first_name: string;
   last_name: string;
   employee_code: string; // Login code
   active: boolean;
-  role?: string;
-}
-
-// --- Operations ---
-
-interface Shift {
-  id: string;
-  station_id: string;
-  employee_id: string;
-  start_time: string;
-  end_time?: string; // null if active
-  status: 'open' | 'closed';
-  opening_cash: number;
 }
 
 interface FuelTransaction {
@@ -115,16 +79,6 @@ interface Handover {
   transactions?: FuelTransaction[];
 }
 
-interface ShopProduct {
-  id: string;
-  sku: string;
-  name: string;
-  price: number;
-  stock_qty: number;
-}
-
-// --- API Responses ---
-
 interface ApiResponse<T> {
   error: boolean;
   message?: string;
@@ -139,32 +93,19 @@ interface ApiResponse<T> {
 ### Attendant Login & Shift Start
 
 1.  **Login:**
-    *   Call `POST /attendants/login` with `{ employee_code: "1234", station_id: "..." }`.
-    *   Store the returned `token` and `employee` object.
-
+    *   Call `POST /attendants/login` with employee code.
 2.  **Check Shift:**
     *   Call `GET /shifts/open?employee_id={id}`.
-    *   If `null`, prompt to start shift.
-
 3.  **Start Shift:**
-    *   Call `POST /shifts/start` with `{ employee_id: "...", station_id: "...", opening_cash: 100 }`.
+    *   Call `POST /shifts/start` if no shift is open.
 
 ### Fuel Dispensing (Real & Demo)
 
-**Standard Flow:**
 1.  **Select Pump:** User taps a pump icon.
-2.  **Get Configuration:** Call `GET /fuel/pumps/{id}` to see status (Idle/Filling) and nozzles.
-3.  **Authorize:**
-    *   Call `POST /fuel/pumps/{id}/authorize` with `{ nozzleNumber: 1, presetType: "Amount", presetDose: 50 }`.
-    *   **Important:** Include `authorized_by_employee_id` to link the sale to the attendant.
-4.  **Monitor:** Listen to WebSocket `pumpStatus` events to show progress bar.
-5.  **Completion:** Backend records transaction automatically. Frontend receives `transaction` event via WebSocket.
-
-**Demo/Training Mode:**
-Use this for testing or "Training Mode" in the app.
-*   Use `POST /demo/fuel/pumps/{id}/authorize` instead of the standard fuel API.
-*   **Must include** `employee_id` and `station_id` in the body so the system tracks it like a real sale.
-*   The system simulates the pumping physics and triggers the same WebSocket events.
+2.  **Authorize:** Call `POST /fuel/pumps/{id}/authorize`.
+    *   **Demo Mode:** Use `POST /demo/fuel/pumps/{id}/authorize`.
+3.  **Monitor:** Listen to WebSocket `pumpStatus` events.
+4.  **Completion:** Backend automatically records transaction.
 
 ### Handover Process
 
@@ -172,141 +113,276 @@ Use this for testing or "Training Mode" in the app.
 
 **Attendant View:**
 1.  Periodically call `GET /handovers?employee_id={id}&status=pending`.
-2.  If a result is found, block new sales and show "Please visit Cashier".
+2.  If result found, prompt user to visit cashier.
 
 **Cashier View:**
-1.  Call `GET /handovers/pending?station_id={id}` to see all pending requests.
-2.  Select a handover to view details (`GET /handovers/{id}/transactions`).
-3.  Count physical cash from attendant.
-4.  Call `POST /handovers/{id}/clear` with `{ amount_cashed: 500, payment_methods: { cash: 500 } }`.
-
-### Shop Sales
-
-1.  **Scan/Select Product:**
-    *   Call `GET /shop/products` to list inventory.
-2.  **Create Sale:**
-    *   Call `POST /shop/sales` with items:
-    ```json
-    {
-      "station_id": "...",
-      "employee_id": "...",
-      "items": [
-        { "product_id": "...", "qty": 2, "unit_price": 1.50 }
-      ],
-      "payment_method": "cash"
-    }
-    ```
-
----
-
-## Real-time WebSocket API
-
-Connect to `wss://tactivo-server-1.onrender.com/ws`.
-
-**Message Structure:**
-```json
-{
-  "type": "pumpStatus", // or 'transaction', 'tankStatus'
-  "data": { ... }
-}
-```
-
-**Events:**
-*   `pumpStatus`: Real-time updates (Volume, Amount, Status: 'Filling'|'Idle').
-*   `transaction`: Sent when a transaction finalizes.
-*   `tankStatus`: Fuel tank level updates.
+1.  Call `GET /handovers/pending?station_id={id}`.
+2.  Select handover -> `GET /handovers/{id}/transactions`.
+3.  Clear -> `POST /handovers/{id}/clear`.
 
 ---
 
 ## Full API Reference
 
-### Organization & Station Management
-| Method | Endpoint | Description |
-| :--- | :--- | :--- |
-| `GET` | `/organizations` | List all organizations |
-| `GET` | `/organizations/:id` | Get organization details |
-| `GET` | `/companies` | List companies (Client entities) |
-| `GET` | `/stations` | List stations |
-| `GET` | `/stations/:id` | Get station configuration |
-
 ### Staff Management
-| Method | Endpoint | Description |
-| :--- | :--- | :--- |
-| `POST` | `/auth/login` | Administrative login |
-| `POST` | `/attendants/login` | POS/Attendant login (requires code) |
-| `GET` | `/employees` | List employees (Filter by station/active) |
-| `GET` | `/roles` | List RBAC roles |
-| `GET` | `/permissions` | List available permissions |
-| `GET` | `/shifts` | History of employee shifts |
-| `GET` | `/shifts/open` | Check for active shift |
-| `POST` | `/shifts/start` | Clock in |
-| `POST` | `/shifts/:id/end` | Clock out |
 
-### Fuel Operations
-| Method | Endpoint | Description |
-| :--- | :--- | :--- |
-| `GET` | `/fuel/pumps` | Status of all pumps |
-| `GET` | `/fuel/pumps/:id` | Status of specific pump |
-| `POST` | `/fuel/pumps/:id/authorize` | Authorize pump for fueling |
-| `POST` | `/fuel/pumps/:id/stop` | Stop pumping |
-| `POST` | `/fuel/pumps/:id/emergency-stop`| Immediate Halt |
-| `GET` | `/fuel/tanks` | Tank levels |
-| `GET` | `/fuel-transactions` | Transaction history |
-| `POST` | `/demo/fuel/pumps/:id/authorize`| **Demo:** Simulate authorization |
+#### Attendant Login
+**POST** `/attendants/login`
 
-### Shop & Stock
-| Method | Endpoint | Description |
-| :--- | :--- | :--- |
-| `GET` | `/shop/products` | Product catalog & stock |
-| `POST` | `/shop/sales` | Record retail sale |
-| `GET` | `/shop/sales` | Sales history |
-| `GET` | `/stock/low-stock` | Low stock alerts |
-| `POST` | `/stock/stock-in` | Receive inventory |
-| `POST` | `/stock/adjust` | Manual inventory adjustment |
+Used by POS terminals for quick attendant access.
 
-### Reports & Analytics
-| Method | Endpoint | Description |
-| :--- | :--- | :--- |
-| `GET` | `/reports/sales` | Aggregated sales (by shift/day/month) |
-| `GET` | `/reports/fuel` | Fuel-specific volume reports |
-| `GET` | `/reports/inventory` | Stock movement reports |
-| `GET` | `/reports/employee` | Attendant performance metrics |
-| `GET` | `/reports/financial` | Financial reconciliation |
+**Request Body:**
+```json
+{
+  "employee_code": "EMP001",
+  "station_id": "550e8400-e29b-41d4-a716-446655440000"
+}
+```
 
-### Finance & Handovers
-| Method | Endpoint | Description |
-| :--- | :--- | :--- |
-| `GET` | `/handovers` | List handovers |
-| `GET` | `/handovers/pending` | **Cashier:** View actionable handovers |
-| `GET` | `/handovers/:id/transactions`| View transactions in a handover |
-| `POST` | `/handovers/:id/clear` | **Cashier:** Clear/Pay out handover |
-| `GET` | `/payments` | Payment ledger |
+**Response:**
+```json
+{
+  "error": false,
+  "data": {
+    "token": "eyJhbGciOiJIUzI1NiIsInR...",
+    "employee": {
+      "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      "first_name": "John",
+      "last_name": "Doe",
+      "role": "Attendant"
+    }
+  }
+}
+```
 
-### System Configuration
-| Method | Endpoint | Description |
-| :--- | :--- | :--- |
-| `GET` | `/pts-controllers` | List PTS hardware controllers |
-| `GET` | `/pumps` | Configure logical pumps |
-| `GET` | `/nozzles` | Configure nozzles & grades |
-| `GET` | `/health` | Server status check |
+#### List Employees
+**GET** `/employees`
+
+**Query Parameters:**
+*   `station_id` (optional): Filter by station UUID.
+*   `active` (optional): `true` or `false`.
+
+**Response:**
+```json
+{
+  "error": false,
+  "data": [
+    {
+      "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      "first_name": "Jane",
+      "last_name": "Smith",
+      "employee_code": "EMP002",
+      "active": true
+    }
+  ]
+}
+```
 
 ---
 
-## Error Handling
+### Fuel Operations
 
-The API returns standard HTTP status codes.
+#### Authorize Pump (Real)
+**POST** `/fuel/pumps/:id/authorize`
 
-*   `200 OK`: Success
-*   `400 Bad Request`: Invalid input (check parameters).
-*   `401 Unauthorized`: Missing or invalid token.
-*   `403 Forbidden`: Valid token but insufficient permissions.
-*   `404 Not Found`: Resource does not exist.
-*   `500 Internal Server Error`: Server-side issue.
-
-**Error Body Format:**
+**Request Body:**
 ```json
 {
-  "error": true,
-  "message": "Descriptive error message"
+  "nozzleNumber": 1,
+  "presetType": "Amount",  // or "Volume"
+  "presetDose": 50.00,
+  "price": 1.65,
+  "authorized_by_employee_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "station_id": "550e8400-e29b-41d4-a716-446655440000"
+}
+```
+
+**Response:**
+```json
+{
+  "error": false,
+  "message": "Pump authorized successfully"
+}
+```
+
+#### Authorize Pump (Demo)
+**POST** `/demo/fuel/pumps/:id/authorize`
+
+Simulates a pump transaction. **Crucial:** Include `employee_id` and `station_id` to link data.
+
+**Request Body:**
+```json
+{
+  "nozzle": 1,
+  "type": "Amount",
+  "dose": 20.00,
+  "price": 1.65,
+  "employee_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "station_id": "550e8400-e29b-41d4-a716-446655440000"
+}
+```
+
+**Response:**
+```json
+{
+  "error": false,
+  "data": {
+    "success": true,
+    "message": "Pump Authorized (Demo)"
+  }
+}
+```
+
+---
+
+### Finance & Handovers
+
+#### Get Pending Handovers (Cashier)
+**GET** `/handovers/pending`
+
+**Query Parameters:**
+*   `station_id`: UUID (Required usually)
+*   `limit`: Number of records (default 100)
+
+**Response:**
+```json
+{
+  "error": false,
+  "data": [
+    {
+      "id": "a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d",
+      "employee_name": "John Doe",
+      "station_name": "Main Station",
+      "transaction_count": 10,
+      "total_amount": 500.00,
+      "amount_expected": 500.00,
+      "status": "pending",
+      "handover_time": "2023-10-27T10:00:00Z"
+    }
+  ]
+}
+```
+
+#### Clear Handover
+**POST** `/handovers/:id/clear`
+
+**Request Body:**
+```json
+{
+  "cashier_employee_id": "99999999-e5f6-4a5b-8c9d-0e1f2a3b4c5d",
+  "amount_cashed": 500.00,
+  "payment_methods": {
+    "cash": 450.00,
+    "pos": 50.00
+  },
+  "notes": "Shift close"
+}
+```
+
+**Response:**
+```json
+{
+  "error": false,
+  "message": "Handover cleared successfully",
+  "data": {
+    "id": "a1b2c3d4-...",
+    "status": "cleared",
+    "difference": 0.00
+  }
+}
+```
+
+---
+
+### Reports & Analytics
+
+#### Sales Report
+**GET** `/reports/sales`
+
+**Query Parameters:**
+*   `station_id`: UUID
+*   `start_date`: ISO Date (e.g., `2023-10-01`)
+*   `end_date`: ISO Date
+*   `group_by`: `day`, `shift`, or `employee`
+
+**Response:**
+```json
+{
+  "error": false,
+  "data": [
+    {
+      "date": "2023-10-01T00:00:00Z",
+      "total_volume": 1500.50,
+      "total_amount": 2475.82,
+      "transaction_count": 45
+    }
+  ]
+}
+```
+
+#### Attendant Performance
+**GET** `/reports/attendants/:id`
+
+**Query Parameters:**
+*   `start_date`: ISO Date
+*   `end_date`: ISO Date
+
+**Response:**
+```json
+{
+  "error": false,
+  "data": {
+    "employee": { "first_name": "John", "last_name": "Doe" },
+    "transactions": {
+      "total_sales": 5000.00,
+      "total_volume": 3000.00,
+      "total_transactions": 100
+    },
+    "shifts": {
+      "total_shifts": 5,
+      "avg_shift_hours": 8.5
+    }
+  }
+}
+```
+
+---
+
+## Real-time WebSocket API
+
+**URL:** `wss://tactivo-server-1.onrender.com/ws`
+
+**Message Format (Server -> Client):**
+
+**Pump Status:**
+```json
+{
+  "type": "pumpStatus",
+  "data": {
+    "pump": 1,
+    "status": {
+      "Status": "Filling", // Idle, Authorized, Filling, EndOfTransaction
+      "Volume": 10.5,
+      "Amount": 17.32,
+      "Price": 1.65,
+      "Nozzle": 1
+    }
+  }
+}
+```
+
+**Transaction Complete:**
+```json
+{
+  "type": "transaction",
+  "data": {
+    "pump": 1,
+    "transaction": 1055,
+    "data": {
+      "Volume": 20.00,
+      "Amount": 33.00,
+      "Price": 1.65
+    }
+  }
 }
 ```
