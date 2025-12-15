@@ -1,6 +1,10 @@
 /**
  * PTS Remote Server Routes
  * Handles incoming data pushed from PTS-2 controller (Remote Server mode)
+ * @swagger
+ * tags:
+ *   - name: PTS Remote
+ *     description: Listener endpoints for PTS-2 Controller push data
  */
 
 const express = require('express');
@@ -74,22 +78,103 @@ async function processPtsPackets(req, res, type) {
     }
 }
 
-// Transaction Upload Endpoint
+/**
+ * @swagger
+ * /api/pts/transactions:
+ *   post:
+ *     summary: Receive transaction records
+ *     description: Endpoint for PTS controller to upload pump transactions
+ *     tags: [PTS Remote]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               Protocol:
+ *                 type: string
+ *                 example: jsonPTS
+ *               Packets:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *     responses:
+ *       200:
+ *         description: Acknowledgment
+ */
 router.post('/transactions', async (req, res) => {
     await processPtsPackets(req, res, 'transactions');
 });
 
-// Tank Measurements Upload Endpoint
+/**
+ * @swagger
+ * /api/pts/tanks:
+ *   post:
+ *     summary: Receive tank measurements
+ *     description: Endpoint for PTS controller to upload tank levels
+ *     tags: [PTS Remote]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               Protocol:
+ *                 type: string
+ *                 example: jsonPTS
+ *               Packets:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *     responses:
+ *       200:
+ *         description: Acknowledgment
+ */
 router.post('/tanks', async (req, res) => {
     await processPtsPackets(req, res, 'tanks');
 });
 
-// Status Upload Endpoint
+/**
+ * @swagger
+ * /api/pts/status:
+ *   post:
+ *     summary: Receive real-time status
+ *     description: Endpoint for PTS controller to upload real-time device status
+ *     tags: [PTS Remote]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               Protocol:
+ *                 type: string
+ *                 example: jsonPTS
+ *               Packets:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *     responses:
+ *       200:
+ *         description: Acknowledgment
+ */
 router.post('/status', async (req, res) => {
     await processPtsPackets(req, res, 'status');
 });
 
-// Generic/Debug Endpoint (for testing or misconfigured URIs)
+/**
+ * @swagger
+ * /api/pts/debug:
+ *   post:
+ *     summary: Debug endpoint for PTS push
+ *     tags: [PTS Remote]
+ *     responses:
+ *       200:
+ *         description: Acknowledgment
+ */
 router.post('/debug', async (req, res) => {
     logger.info('Received generic PTS debug push', { body: JSON.stringify(req.body, null, 2) });
     await processPtsPackets(req, res, 'debug');
