@@ -39,6 +39,7 @@ const debtorRoutes = require('./routes/debtors.routes');
 const stockRoutes = require('./routes/stock.routes');
 const attendantRoutes = require('./routes/attendant.routes');
 const demoRoutes = require('./routes/demo.routes');
+const ptsRemoteRoutes = require('./routes/pts-remote.routes');
 
 // Import services
 const FuelService = require('./services/fuel.service');
@@ -96,14 +97,6 @@ app.use('/api/nozzles', nozzleRoutes);
 app.use('/api/station-shifts', stationShiftRoutes);
 app.use('/api/debtors', debtorRoutes);
 app.use('/api/stock', stockRoutes);
-app.use('/api/attendants', attendantRoutes);
-app.use('/api/roles', roleRoutes);
-app.use('/api/permissions', permissionRoutes);
-const demoRoutes = require('./routes/demo.routes');
-const ptsRemoteRoutes = require('./routes/pts-remote.routes');
-
-// ... existing code ...
-
 app.use('/api/attendants', attendantRoutes);
 app.use('/api/roles', roleRoutes);
 app.use('/api/permissions', permissionRoutes);
