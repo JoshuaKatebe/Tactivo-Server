@@ -126,6 +126,7 @@ async function initializeServices() {
         // Initialize Fuel Service (if enabled)
         if (config.pts.enabled) {
             fuelService = new FuelService(config.pts);
+            app.locals.fuelService = fuelService; // Expose for Routes
 
             // Set up WebSocket broadcast handler
             fuelService.on('statusUpdate', (data) => {
@@ -149,9 +150,13 @@ async function initializeServices() {
                 }));
             });
 
-            // Start polling
-            await fuelService.startPolling();
-            logger.info('⛽ Fuel Service initialized (Local Mode)');
+            // Start polling if enabled
+            if (config.pts.pollingEnabled) {
+                await fuelService.startPolling();
+                logger.info('⛽ Fuel Service initialized (Local/Polling Mode)');
+            } else {
+                logger.info('📡 Fuel Service initialized (Listener Mode) - Polling disabled');
+            }
         } else {
             logger.info('☁️ Fuel Service DISABLED (Cloud/API Mode) - PTS connection skipped');
         }

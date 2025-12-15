@@ -11,6 +11,7 @@ module.exports = {
     },
     pts: {
         enabled: process.env.PTS_ENABLED !== 'false', // Default to true if not specified
+        pollingEnabled: process.env.PTS_POLLING_ENABLED !== 'false', // Default to true
         url: process.env.PTS_URL || 'https://192.168.1.117/jsonPTS',
         username: process.env.PTS_USERNAME || 'admin',
         password: process.env.PTS_PASSWORD || 'admin',
