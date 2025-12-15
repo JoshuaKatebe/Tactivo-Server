@@ -11,7 +11,7 @@ module.exports = {
     },
     pts: {
         enabled: process.env.PTS_ENABLED !== 'false', // Default to true if not specified
-        url: process.env.PTS_URL || 'http://192.168.1.117/jsonPTS',
+        url: process.env.PTS_URL || 'https://192.168.1.117/jsonPTS',
         username: process.env.PTS_USERNAME || 'admin',
         password: process.env.PTS_PASSWORD || 'admin',
         timeout: parseInt(process.env.PTS_TIMEOUT) || 30000,
