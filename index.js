@@ -99,7 +99,16 @@ app.use('/api/stock', stockRoutes);
 app.use('/api/attendants', attendantRoutes);
 app.use('/api/roles', roleRoutes);
 app.use('/api/permissions', permissionRoutes);
+const demoRoutes = require('./routes/demo.routes');
+const ptsRemoteRoutes = require('./routes/pts-remote.routes');
+
+// ... existing code ...
+
+app.use('/api/attendants', attendantRoutes);
+app.use('/api/roles', roleRoutes);
+app.use('/api/permissions', permissionRoutes);
 app.use('/api/demo', demoRoutes);
+app.use('/api/pts', ptsRemoteRoutes);
 
 // WebSocket Server for real-time updates
 const wss = new WebSocket.Server({ server, path: '/ws' });

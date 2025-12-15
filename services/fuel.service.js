@@ -608,6 +608,58 @@ class FuelService extends EventEmitter {
     getConfiguredProbes() {
         return Array.from(this.configuredProbes);
     }
+    /**
+     * Handle packet received from Remote Server push
+     * @param {Object} packet - jsonPTS packet
+     */
+    async handleRemotePacket(packet) {
+        if (!packet || !packet.Type || !packet.Data) {
+            return;
+        }
+
+        const type = packet.Type;
+        const data = packet.Data;
+
+        logger.debug('Handling remote packet', { type, data });
+
+        switch (type) {
+            case 'PumpStatus':
+            case 'PumpGetStatus': // Use both just in case
+                if (data.Pump) {
+                    this.configuredPumps.add(data.Pump);
+                    this.updatePumpStatus(data.Pump, data);
+                }
+                break;
+
+            case 'ProbeMeasurements':
+            case 'ProbeGetMeasurements':
+                // Handle tank data (Probe field might be in Data or inferred)
+                let probeNum = data.Probe;
+                if (probeNum) {
+                    this.configuredProbes.add(probeNum);
+                    this.updateTankStatus(probeNum, data);
+                }
+                break;
+
+            case 'PumpTransactionInformation':
+            case 'PumpGetTransactionInformation':
+                // Transaction completed
+                if (data.Pump && data.Transaction) {
+                    this.emit('transactionUpdate', {
+                        pump: data.Pump,
+                        transaction: data.Transaction,
+                        data: data
+                    });
+
+                    // We might want to auto-save here too, or let the listener do it
+                    // But typically this event triggers the frontend or other logic
+                }
+                break;
+
+            default:
+                logger.debug('Unhandled remote packet type', { type });
+        }
+    }
 }
 
 module.exports = FuelService;
