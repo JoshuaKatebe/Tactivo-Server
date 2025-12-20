@@ -44,7 +44,7 @@ const options = {
                 description: 'Local Network Server'
             },
             {
-                url: `https://www.z360solutions.com/`,
+                url: `https://www.z360solutions.com`,
                 description: 'Production domain'
             },
             {
