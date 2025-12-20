@@ -438,39 +438,5 @@ router.get('/devices', (req, res) => {
     });
 });
 
-/**
- * Catch-all for any other PTS paths - useful for discovering what the controller sends
- */
-router.all('/(.*)', (req, res) => {
-    logger.info('📦 Unknown PTS endpoint accessed', {
-        method: req.method,
-        path: req.path,
-        body: req.body ? JSON.stringify(req.body).substring(0, 500) : 'none'
-    });
-
-    if (req.method === 'POST') {
-        // Try to process as generic jsonPTS
-        processPtsPackets(req, res, 'unknown');
-    } else {
-        res.json({
-            Protocol: 'jsonPTS',
-            Packets: [{
-                Id: 0,
-                Type: 'Info',
-                Data: {
-                    Message: 'Tactivo PTS Remote Server',
-                    Endpoints: [
-                        '/api/pts/transactions',
-                        '/api/pts/tanks',
-                        '/api/pts/status',
-                        '/api/pts/deliveries',
-                        '/api/pts/alerts',
-                        '/api/pts/configuration'
-                    ]
-                }
-            }]
-        });
-    }
-});
-
 module.exports = router;
+
