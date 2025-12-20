@@ -441,7 +441,7 @@ router.get('/devices', (req, res) => {
 /**
  * Catch-all for any other PTS paths - useful for discovering what the controller sends
  */
-router.all('*', (req, res) => {
+router.all('/(.*)', (req, res) => {
     logger.info('📦 Unknown PTS endpoint accessed', {
         method: req.method,
         path: req.path,
