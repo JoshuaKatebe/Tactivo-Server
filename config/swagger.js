@@ -342,7 +342,8 @@ const options = {
             { name: 'Roles', description: 'Role management' },
             { name: 'Permissions', description: 'Permission management' },
             { name: 'Health', description: 'System health checks' },
-            { name: 'Demo', description: 'Simulation and Demo Mode APIs' }
+            { name: 'Demo', description: 'Simulation and Demo Mode APIs' },
+            { name: 'PTS Remote', description: 'PTS-2 Controller push data endpoints (Remote Server mode)' }
         ]
     },
     apis: ['./routes/*.js', './index.js'] // Path to the API files

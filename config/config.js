@@ -32,6 +32,12 @@ module.exports = {
     logging: {
         level: process.env.LOG_LEVEL || 'debug',
         file: process.env.LOG_FILE || './logs/tactivo.log'
+    },
+    ptsRemote: {
+        username: process.env.PTS_REMOTE_USERNAME || 'admin',
+        password: process.env.PTS_REMOTE_PASSWORD || 'admin',
+        secretKey: process.env.PTS_SECRET_KEY || '',
+        verifySignature: process.env.PTS_VERIFY_SIGNATURE === 'true'
     }
 };
 

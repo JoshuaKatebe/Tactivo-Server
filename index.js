@@ -158,7 +158,41 @@ async function initializeServices() {
                 logger.info('📡 Fuel Service initialized (Listener Mode) - Polling disabled');
             }
         } else {
-            logger.info('☁️ Fuel Service DISABLED (Cloud/API Mode) - PTS connection skipped');
+            // ☁️ Cloud Mode - Initialize PTSRemoteService to receive pushed data
+            const PTSRemoteService = require('./services/pts-remote.service');
+            const ptsRemoteService = new PTSRemoteService(config.ptsRemote);
+            app.locals.ptsRemoteService = ptsRemoteService;
+
+            // Set up WebSocket broadcast handlers for cloud mode
+            ptsRemoteService.on('statusUpdate', (data) => {
+                broadcastToClients(JSON.stringify({
+                    type: 'pumpStatus',
+                    data: data
+                }));
+            });
+
+            ptsRemoteService.on('transactionUpdate', (data) => {
+                broadcastToClients(JSON.stringify({
+                    type: 'transaction',
+                    data: data
+                }));
+            });
+
+            ptsRemoteService.on('tankUpdate', (data) => {
+                broadcastToClients(JSON.stringify({
+                    type: 'tankStatus',
+                    data: data
+                }));
+            });
+
+            ptsRemoteService.on('alert', (data) => {
+                broadcastToClients(JSON.stringify({
+                    type: 'alert',
+                    data: data
+                }));
+            });
+
+            logger.info('☁️ PTS Remote Service initialized (Cloud Mode) - Waiting for PTS-2 push data');
         }
 
         logger.info('Services initialized successfully');
