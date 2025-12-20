@@ -386,7 +386,7 @@ router.post('/shifts', async (req, res) => {
  */
 router.post('/debug', async (req, res) => {
     logger.info('🔧 Debug PTS push received', {
-        body: JSON.stringify(req.body, null, 2).substring(0, 2000)
+        body: req.body ? JSON.stringify(req.body, null, 2).substring(0, 2000) : 'empty'
     });
     await processPtsPackets(req, res, 'debug');
 });

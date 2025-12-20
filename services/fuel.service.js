@@ -641,6 +641,23 @@ class FuelService extends EventEmitter {
                 }
                 break;
 
+            case 'PumpTransaction':
+                // Pump transaction pushed from PTS-2
+                if (data.Pump) {
+                    logger.info('Pump transaction received via push', {
+                        pump: data.Pump,
+                        transaction: data.Transaction || data.TransactionNumber,
+                        volume: data.Volume,
+                        amount: data.Amount
+                    });
+                    this.emit('transactionUpdate', {
+                        pump: data.Pump,
+                        transaction: data.Transaction || data.TransactionNumber,
+                        data: data
+                    });
+                }
+                break;
+
             case 'PumpTransactionInformation':
             case 'PumpGetTransactionInformation':
                 // Transaction completed
