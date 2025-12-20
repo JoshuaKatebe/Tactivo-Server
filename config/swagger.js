@@ -44,8 +44,8 @@ const options = {
                 description: 'Local Network Server'
             },
             {
-                url: `http://localhost:${port}`,
-                description: 'Localhost'
+                url: `https://www.z360solutions.com/`,
+                description: 'Production domain'
             },
             {
                 url: 'https://tactivo-server-1.onrender.com',
