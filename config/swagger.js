@@ -316,6 +316,138 @@ const options = {
                             format: 'date-time'
                         }
                     }
+                },
+                Sale: {
+                    type: 'object',
+                    properties: {
+                        id: {
+                            type: 'string',
+                            format: 'uuid'
+                        },
+                        station_id: {
+                            type: 'string',
+                            format: 'uuid'
+                        },
+                        employee_id: {
+                            type: 'string',
+                            format: 'uuid',
+                            nullable: true
+                        },
+                        terminal_id: {
+                            type: 'string',
+                            nullable: true
+                        },
+                        sale_time: {
+                            type: 'string',
+                            format: 'date-time'
+                        },
+                        total_amount: {
+                            type: 'number',
+                            format: 'decimal'
+                        },
+                        payments: {
+                            type: 'object',
+                            description: 'Payment breakdown (e.g., {cash: 10, card: 5})'
+                        },
+                        synced: {
+                            type: 'boolean',
+                            default: false
+                        },
+                        created_at: {
+                            type: 'string',
+                            format: 'date-time'
+                        },
+                        items: {
+                            type: 'array',
+                            items: {
+                                $ref: '#/components/schemas/SaleItem'
+                            }
+                        }
+                    }
+                },
+                SaleItem: {
+                    type: 'object',
+                    properties: {
+                        id: {
+                            type: 'string',
+                            format: 'uuid'
+                        },
+                        sale_id: {
+                            type: 'string',
+                            format: 'uuid'
+                        },
+                        product_id: {
+                            type: 'string',
+                            format: 'uuid'
+                        },
+                        qty: {
+                            type: 'number',
+                            format: 'decimal'
+                        },
+                        unit_price: {
+                            type: 'number',
+                            format: 'decimal'
+                        },
+                        line_total: {
+                            type: 'number',
+                            format: 'decimal'
+                        },
+                        product_name: {
+                            type: 'string'
+                        },
+                        sku: {
+                            type: 'string'
+                        }
+                    }
+                },
+                CreateSaleRequest: {
+                    type: 'object',
+                    required: ['station_id', 'total_amount', 'items'],
+                    properties: {
+                        station_id: {
+                            type: 'string',
+                            format: 'uuid'
+                        },
+                        employee_id: {
+                            type: 'string',
+                            format: 'uuid'
+                        },
+                        terminal_id: {
+                            type: 'string'
+                        },
+                        sale_time: {
+                            type: 'string',
+                            format: 'date-time'
+                        },
+                        total_amount: {
+                            type: 'number'
+                        },
+                        payments: {
+                            type: 'object'
+                        },
+                        items: {
+                            type: 'array',
+                            items: {
+                                type: 'object',
+                                required: ['product_id', 'qty', 'unit_price', 'line_total'],
+                                properties: {
+                                    product_id: {
+                                        type: 'string',
+                                        format: 'uuid'
+                                    },
+                                    qty: {
+                                        type: 'number'
+                                    },
+                                    unit_price: {
+                                        type: 'number'
+                                    },
+                                    line_total: {
+                                        type: 'number'
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         },
