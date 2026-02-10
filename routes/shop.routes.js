@@ -44,7 +44,7 @@ router.get('/products', authenticate, async (req, res) => {
             station_id: req.query.station_id,
             active: req.query.active !== undefined ? req.query.active === 'true' : undefined
         };
-        
+
         const products = await shopService.getProducts(filters);
         res.json({
             error: false,
@@ -138,7 +138,7 @@ router.get('/products', authenticate, async (req, res) => {
 router.get('/products/:id', authenticate, async (req, res) => {
     try {
         const product = await shopService.getProductById(req.params.id);
-        
+
         if (!product) {
             return res.status(404).json({
                 error: true,
@@ -250,7 +250,7 @@ router.post('/products', authenticate, async (req, res) => {
         const product = await shopService.createProduct({
             station_id, sku, name, price, cost, unit, stock_qty, active
         });
-        
+
         res.status(201).json({
             error: false,
             data: product
@@ -267,7 +267,7 @@ router.post('/products', authenticate, async (req, res) => {
 router.put('/products/:id', authenticate, async (req, res) => {
     try {
         const product = await shopService.updateProduct(req.params.id, req.body);
-        
+
         if (!product) {
             return res.status(404).json({
                 error: true,
@@ -291,7 +291,7 @@ router.put('/products/:id', authenticate, async (req, res) => {
 router.delete('/products/:id', authenticate, async (req, res) => {
     try {
         const product = await shopService.deleteProduct(req.params.id);
-        
+
         if (!product) {
             return res.status(404).json({
                 error: true,
@@ -317,8 +317,53 @@ router.delete('/products/:id', authenticate, async (req, res) => {
 // ============================================================================
 
 /**
- * GET /api/shop/sales
- * Get all sales
+ * @swagger
+ * /api/shop/sales:
+ *   get:
+ *     summary: Get all sales
+ *     tags: [Shop]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: station_id
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: query
+ *         name: employee_id
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: query
+ *         name: start_date
+ *         schema:
+ *           type: string
+ *           format: date-time
+ *       - in: query
+ *         name: end_date
+ *         schema:
+ *           type: string
+ *           format: date-time
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 100
+ *     responses:
+ *       200:
+ *         description: List of sales
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/Sale'
  */
 router.get('/sales', authenticate, async (req, res) => {
     try {
@@ -329,7 +374,7 @@ router.get('/sales', authenticate, async (req, res) => {
             end_date: req.query.end_date,
             limit: parseInt(req.query.limit) || 100
         };
-        
+
         const sales = await shopService.getSales(filters);
         res.json({
             error: false,
@@ -345,13 +390,39 @@ router.get('/sales', authenticate, async (req, res) => {
 });
 
 /**
- * GET /api/shop/sales/:id
- * Get sale by ID (with items)
+ * @swagger
+ * /api/shop/sales/{id}:
+ *   get:
+ *     summary: Get sale by ID (with items)
+ *     tags: [Shop]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Sale details with items
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: boolean
+ *                 data:
+ *                   $ref: '#/components/schemas/Sale'
+ *       404:
+ *         description: Sale not found
  */
 router.get('/sales/:id', authenticate, async (req, res) => {
     try {
         const sale = await shopService.getSaleById(req.params.id);
-        
+
         if (!sale) {
             return res.status(404).json({
                 error: true,
@@ -373,8 +444,31 @@ router.get('/sales/:id', authenticate, async (req, res) => {
 });
 
 /**
- * POST /api/shop/sales
- * Create sale
+ * @swagger
+ * /api/shop/sales:
+ *   post:
+ *     summary: Create a new sale
+ *     tags: [Shop]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/CreateSaleRequest'
+ *     responses:
+ *       201:
+ *         description: Sale created
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: boolean
+ *                 data:
+ *                   $ref: '#/components/schemas/Sale'
  */
 router.post('/sales', authenticate, async (req, res) => {
     try {
@@ -419,13 +513,39 @@ router.post('/sales', authenticate, async (req, res) => {
 });
 
 /**
- * POST /api/shop/sales/:id/sync
- * Mark sale as synced
+ * @swagger
+ * /api/shop/sales/{id}/sync:
+ *   post:
+ *     summary: Mark sale as synced
+ *     tags: [Shop]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Sale marked as synced
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error:
+ *                   type: boolean
+ *                 data:
+ *                   $ref: '#/components/schemas/Sale'
+ *       404:
+ *         description: Sale not found
  */
 router.post('/sales/:id/sync', authenticate, async (req, res) => {
     try {
         const sale = await shopService.markSaleSynced(req.params.id);
-        
+
         if (!sale) {
             return res.status(404).json({
                 error: true,

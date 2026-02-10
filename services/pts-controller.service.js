@@ -61,7 +61,7 @@ class PTSControllerService {
              VALUES ($1, $2, $3, $4, $5) RETURNING *`,
             [
                 station_id || null, identifier || null, hostname || null,
-                port || 80, http_auth || null
+                port || 443, http_auth || null
             ]
         );
         return result.rows[0];
@@ -82,7 +82,7 @@ class PTSControllerService {
             `UPDATE pts_controllers 
              SET identifier = $1, hostname = $2, port = $3, http_auth = $4, updated_at = now()
              WHERE id = $5 RETURNING *`,
-            [identifier || null, hostname || null, port || 80, http_auth || null, id]
+            [identifier || null, hostname || null, port || 443, http_auth || null, id]
         );
         return result.rows[0] || null;
     }

@@ -16,7 +16,15 @@
 7. [WebSocket Integration](#websocket-integration)
 8. [Reports & Analytics APIs](#reports--analytics-apis)
 9. [Complete Working Example](#complete-working-example)
-10. [Full API Reference & Examples](#full-api-reference--examples)
+10. [Full API Reference & Examples](#full-api-reference--example
+5. [WebSocket Integration](#websocket-integration)
+6. [Reports & Analytics APIs](#reports--analytics-apis)
+7. [Complete Working Example](#complete-working-example)
+8. [Error Handling](#error-handling)
+9. [Best Practices](#best-practices)
+10. [API Endpoints Summary](#api-endpoints-summary)
+
+ **See also:** For a complete reference of all 13 report endpoints, refer to the [Report API Integration Guide](./REPORT_API_INTEGRATION_GUIDE.md).
 
 ---
 
@@ -460,3 +468,170 @@ This section provides detailed Request/Response examples for AI generation and i
   }
 }
 ```
+
+### 3. Offline Support
+
+Handle offline scenarios gracefully:
+
+```javascript
+// offline-handler.js
+export function setupOfflineHandling() {
+  window.addEventListener('online', () => {
+    console.log('Back online');
+    // Sync pending transactions
+    syncPendingTransactions();
+  });
+
+  window.addEventListener('offline', () => {
+    console.log('Gone offline');
+    // Show offline indicator
+    showOfflineMessage();
+  });
+}
+
+function showOfflineMessage() {
+  // Display notification to user
+  const notification = document.createElement('div');
+  notification.className = 'offline-banner';
+  notification.textContent = 'You are currently offline. Some features may be unavailable.';
+  document.body.appendChild(notification);
+}
+```
+
+### 4. Performance Optimization
+
+```javascript
+// Use React.memo for expensive components
+export const TransactionMonitor = React.memo(({ pumpNumber, onComplete }) => {
+  // Component implementation
+}, (prevProps, nextProps) => {
+  // Only re-render if pumpNumber changes
+  return prevProps.pumpNumber === nextProps.pumpNumber;
+});
+
+// Debounce search inputs
+import { debounce } from 'lodash';
+
+const debouncedSearch = debounce((searchTerm) => {
+  searchEmployees(searchTerm);
+}, 300);
+```
+
+---
+
+## API Endpoints Summary
+
+This section provides a comprehensive reference of all available API endpoints, organized by category.
+
+### Authentication
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/auth/login` | POST | Login user with username and password |
+| `/api/auth/me` | GET | Get current authenticated user info |
+
+### Attendants
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/attendants/login` | POST | Login attendant by code, badge, or card |
+| `/api/attendants/{id}` | GET | Get attendant status with current shift |
+| `/api/attendants/{id}/logout` | POST | Record attendant logout |
+| `/api/attendants/{id}/validate` | GET | Validate attendant is active/authorized |
+
+### Employees
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/employees` | GET | Get all employees (with filters) |
+| `/api/employees` | POST | Create new employee |
+| `/api/employees/{id}` | GET | Get employee by ID |
+| `/api/employees/{id}` | PUT | Update employee |
+| `/api/employees/{id}` | DELETE | Delete employee |
+| `/api/employees/{id}/roles` | GET | Get employee roles |
+
+### Shifts
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/shifts` | GET | List shifts with filters |
+| `/api/shifts/open` | GET | Get open shift for employee/station |
+| `/api/shifts/{id}` | GET | Get shift by ID |
+| `/api/shifts/start` | POST | Start a new shift |
+| `/api/shifts/{id}/end` | POST | End a shift |
+| `/api/shifts/{id}/transactions` | GET | Get shift transactions |
+| `/api/shifts/{id}/summary` | GET | Get shift summary |
+
+### Fuel Operations
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/fuel/pumps` | GET | Get all pump statuses |
+| `/api/fuel/pumps/{num}` | GET | Get single pump status |
+| `/api/fuel/pumps/{num}/authorize` | POST | Authorize pump for fueling |
+| `/api/fuel/pumps/{num}/stop` | POST | Stop a pump |
+| `/api/fuel/pumps/{num}/emergency-stop` | POST | Emergency stop pump |
+| `/api/fuel/pumps/{num}/totals` | GET | Get pump shift totals |
+| `/api/fuel/pumps/{num}/close-transaction` | POST | Close and record transaction |
+| `/api/fuel/config/pumps` | GET | Get pump configuration |
+| `/api/fuel/config/fuel-grades` | GET | Get fuel grades config |
+| `/api/fuel/config/nozzles` | GET | Get nozzles configuration |
+| `/api/fuel/pumps/{num}/prices` | GET | Get pump prices |
+| `/api/fuel/tanks` | GET | Get tank levels |
+
+### Fuel Transactions
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/fuel-transactions` | GET | List fuel transactions |
+| `/api/fuel-transactions/pending` | GET | Get pending (uncleared) transactions |
+| `/api/fuel-transactions/summary` | GET | Get transaction summary |
+| `/api/fuel-transactions/{id}` | GET | Get transaction by ID |
+| `/api/fuel-transactions/register` | POST | Register manual transaction |
+| `/api/fuel-transactions/{id}/quick-clear` | POST | Quick clear a transaction |
+| `/api/fuel-transactions/by-shift/{id}` | GET | Get transactions by shift |
+| `/api/fuel-transactions/by-employee/{id}` | GET | Get transactions by employee |
+
+### Shop (POS)
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/shop/products` | GET | Get all products |
+| `/api/shop/products` | POST | Create product |
+| `/api/shop/products/{id}` | GET | Get product by ID |
+| `/api/shop/products/{id}` | PUT | Update product |
+| `/api/shop/products/{id}` | DELETE | Delete product |
+| `/api/shop/sales` | GET | Get all sales |
+| `/api/shop/sales` | POST | Create a sale |
+| `/api/shop/sales/{id}` | GET | Get sale by ID |
+
+### Reports
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/reports/sales` | GET | Comprehensive sales report |
+| `/api/reports/sales/itemized` | GET | Itemized shop sales |
+| `/api/reports/fuel` | GET | Fuel sales by pump/grade |
+| `/api/reports/fuel/itemized` | GET | Itemized fuel transactions |
+| `/api/reports/inventory` | GET | Inventory/stock report |
+| `/api/reports/financial` | GET | Financial/revenue report |
+| `/api/reports/employee` | GET | Employee performance |
+| `/api/reports/attendants/{id}` | GET | Attendant performance |
+| `/api/reports/shifts/{id}` | GET | Detailed shift report |
+| `/api/reports/shifts/{id}/reconciliation` | GET | Shift cash reconciliation |
+| `/api/reports/daily-shifts` | GET | Daily shifts summary |
+| `/api/reports/pump-readings` | GET | Pump readings history |
+| `/api/reports/credit-sales` | GET | Credit sales report |
+
+---
+
+### Next Steps
+
+1. Implement authentication for your main application users
+2. Add payment processing integration
+3. Implement receipt printing
+4. Add inventory management for shop items
+5. Create mobile-responsive designs
+6. Implement progressive web app (PWA) features
+
+For complete API documentation with interactive testing, visit `/api-docs` on your running server.
