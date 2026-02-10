@@ -5,6 +5,7 @@
 
 const db = require('../lib/db');
 const logger = require('../utils/logger');
+const handoverService = require('./handover.service');
 
 class PumpTransactionsService {
     constructor() {
@@ -114,6 +115,20 @@ class PumpTransactionsService {
                 pumpNumber,
                 transactionId: savedTransaction.id
             });
+
+            // Check if this transaction triggers a handover (10th transaction)
+            if (savedTransaction.authorized_by_employee_id && savedTransaction.station_id) {
+                try {
+                    await handoverService.checkAndCreateHandover(
+                        savedTransaction.authorized_by_employee_id,
+                        savedTransaction.station_id,
+                        savedTransaction.id
+                    );
+                } catch (err) {
+                    logger.error('Error checking handover trigger', err);
+                    // Don't fail the transaction completion just because handover check failed
+                }
+            }
 
             // Remove from pending
             this.pendingTransactions.delete(pumpNumber);
